@@ -1,0 +1,212 @@
+---
+title: 'Drink Mixing System'
+description: 'Mix drinks from VA-11 HALL-A and real-world cocktails with an immersive bartending experience'
+icon: 'martini-glass'
+---
+
+## Overview
+
+The drink mixing system is Jill Stingray's signature feature, allowing users to order drinks from two distinct menus:
+
+- **VA-11 HALL-A Specials** - Iconic cyberpunk drinks from the game
+- **Classic Cocktails** - Real-world recipes from TheCocktailDB
+
+When you order a drink, Jill prepares it in real-time with dynamic status updates, ingredient lists, and beautiful presentation embeds.
+
+## Command Usage
+
+### Order a VA-11 HALL-A Special
+
+```bash
+/mix special name:<drink_name>
+```
+
+**Features:**
+- Autocomplete suggestions for all 27+ VA-11 HALL-A drinks
+- Animated preparation sequence
+- Full recipe display with ingredients
+- Drink images from the game
+- Flavor, type, and price information
+
+<Accordion title="Example: Ordering a Bad Touch">
+```bash
+/mix special name:Bad Touch
+```
+
+**Response:**
+1. `[Order Received] One Bad Touch, coming up...`
+2. `[Preparing Bad Touch...] Adding 2 Bronson Extract...`
+3. `[Preparing Bad Touch...] Mixing ingredients...`
+4. Final embed with drink details:
+   - **Flavor:** Sour | **Type:** Classy | **Price:** $250
+   - **Description:** "Sour, classy and vintage. We're nothing but mammals."
+   - **Recipe:** Full ingredient list
+</Accordion>
+
+### Order a Classic Cocktail
+
+```bash
+/mix classic name:<cocktail_name>
+```
+
+**Features:**
+- Live search from TheCocktailDB API
+- Step-by-step mixing instructions
+- Natural language processing for continuous verb forms
+- High-resolution drink images
+- Randomized bartender quotes
+
+<Accordion title="Example: Ordering a Margarita">
+```bash
+/mix classic name:Margarita
+```
+
+**Response:**
+1. `[Order Received] One Margarita, coming up...`
+2. `[Mixing Margarita...] Rubbing the rim of the glass with lime juice...`
+3. `[Mixing Margarita...] Mixing the rest...`
+4. `[Mixing Margarita...] Shaking and straining into a glass...`
+5. Final embed with full recipe and "Enjoy." or similar quote
+</Accordion>
+
+## VA-11 HALL-A Drink Database
+
+The bot includes 27 canonical drinks from VA-11 HALL-A, organized by type:
+
+<Tabs>
+  <Tab title="Girly Drinks">
+    - **Sugar Rush** - Sweet, girly and happy ($150)
+    - **Sparkle Star** - Sweet, girly and happy ($150)
+    - **Blue Fairy** - Sweet, girly and soft ($170)
+    - **Sunshine Cloud** - Bitter, girly and soft ($150)
+    - **Moonblast** - Sweet, girly and happy ($180) *Popular*
+  </Tab>
+  
+  <Tab title="Classy Drinks">
+    - **Bad Touch** - Sour, classy and vintage ($250)
+    - **Brandtini** - Sweet, classy and happy ($250)
+    - **Cobalt Velvet** - Bubbly, classy and burning ($280)
+    - **Fringe Weaver** - Bubbly, classy and strong ($260)
+    - **Mercuryblast** - Sour, classy and burning ($250)
+  </Tab>
+  
+  <Tab title="Manly Drinks">
+    - **Crevice Spike** - Sour, manly and sobering ($140)
+    - **Gut Punch** - Bitter, manly and strong ($80)
+    - **Marsblast** - Spicy, manly and strong ($170)
+    - **Pile Driver** - Bitter, manly and burning ($160)
+    - **Suplex** - Bitter, manly and burning ($160)
+  </Tab>
+  
+  <Tab title="Classic Drinks">
+    - **Beer** - Bubbly, classic and vintage ($200)
+    - **Bleeding Jane** - Spicy, classic and sobering ($200)
+    - **Flaming Moai** - Sour, classic and classy ($150)
+    - **Frothy Water** - Bubbly, classic and bland ($150)
+    - **Mulan Tea** - Bitter, classic and vintage ($170)
+  </Tab>
+  
+  <Tab title="Promo Drinks">
+    - **Bloom Light** - Spicy, promo and bland ($230)
+    - **Grizzly Temple** - Bitter, promo and bland ($220)
+    - **Piano Man** - Sour, promo and strong ($320)
+    - **Piano Woman** - Sweet, promo and happy ($320)
+    - **Zen Star** - Sour, promo and bland ($210)
+  </Tab>
+  
+  <Tab title="Bottled">
+    - **Absinthe** - Pure alcohol ($500)
+    - **Rum** - A pirate's favorite ($500)
+  </Tab>
+</Tabs>
+
+## Technical Implementation
+
+### Source Code Reference
+
+The drink mixing system is implemented in `/commands/mix.js`:
+
+```javascript
+// Drink data loaded from va11_drinks.json
+const specials = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+
+// Autocomplete for VA-11 HALL-A drinks
+if (sub.name === "special") {
+  let allDrinks = Object.keys(specials);
+  if (query) {
+    allDrinks = allDrinks.filter((name) =>
+      name.toLowerCase().includes(query)
+    );
+  }
+  return interaction.acknowledge(suggestions);
+}
+```
+
+### Preparation Animation
+
+When ordering a special, the bot uses staged message editing:
+
+```javascript
+await interaction.editOriginalMessage({
+  content: `**[Preparing ${drinkName}...]**\n*Adding ${drink.ingredients[0]}...*`,
+});
+await wait(2000);
+await interaction.editOriginalMessage({
+  content: `**[Preparing ${drinkName}...]**\n*Mixing ingredients...*`,
+});
+await wait(2000);
+```
+
+### Grammar Processing
+
+Classic cocktail instructions use natural language processing to convert verbs to continuous form:
+
+```javascript
+function processGrammar(text) {
+  const words = text.trim().split(" ");
+  let conjugated = nlp(words[0]).verbs().toGerund().text();
+  if (conjugated) conjugated = conjugated.replace(/^is\s+/i, "");
+  return words.join(" ");
+}
+// "Pour gin" → "Pouring gin..."
+```
+
+<Info>
+**Patron System Integration:** Every drink order is logged to the patron system via `logDrink(interaction.member.id, interaction.guildID, drinkName)` for tracking user activity.
+</Info>
+
+## Example Drink Data Structure
+
+From `va11_drinks.json`:
+
+```json
+{
+  "Bad Touch": {
+    "flavor": "Sour",
+    "type": "Classy",
+    "price": "$250",
+    "ingredients": [
+      "2 Bronson Extract",
+      "2 Powdered Delta",
+      "2 Flanergide",
+      "2 Karmotrine",
+      "Ice"
+    ],
+    "description": "Sour, classy and vintage. We're nothing but mammals.",
+    "image": "bad touch.png"
+  }
+}
+```
+
+## Visual Experience
+
+<Note>
+VA-11 HALL-A specials include custom drink images stored in `/data/images/` that are dynamically loaded and attached to the embed response for an authentic cyberpunk bar experience.
+</Note>
+
+Each drink presentation includes:
+- Color-coded embeds (pink for specials, cyan for classics)
+- Drink images or thumbnails
+- Formatted ingredient lists
+- Atmospheric quotes and descriptions
+- Footer attribution ("Va-11 Hall-A Special" or "Jill: 'Quote'")

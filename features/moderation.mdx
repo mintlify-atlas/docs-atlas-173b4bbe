@@ -1,0 +1,423 @@
+---
+title: 'Moderation Suite'
+description: 'Comprehensive server management tools including message purging, role management, and server auditing'
+icon: 'shield-halved'
+---
+
+## Overview
+
+Jill Stingray's moderation suite provides powerful administrative tools with a cyberpunk twist. All commands include personality-driven responses and confirmation systems to prevent accidents.
+
+**Core Features:**
+- Message bulk deletion with statistics
+- Complete role management (create, edit, delete, assign, move)
+- Server audit tools for unused roles
+- Permission checking system
+
+## Message Purging
+
+### Delete Messages in Bulk
+
+```bash
+/purge amount:<2-100>
+```
+
+**Features:**
+- Deletes 2-100 messages at once
+- Skips messages older than 14 days (Discord API limitation)
+- Tracks who sent the most messages
+- Responds with sarcastic Jill Stingray quotes
+- Shows cleanup statistics
+
+<Accordion title="Example: Purge 50 messages">
+```bash
+/purge amount:50
+```
+
+**Response:**
+```
+🧹 Cleanup Complete
+
+Deleted 47 messages.
+
+Half of this trash belonged to @ChatterBox. Get a hobby.
+
+The Noise Makers:
+ChatterBox: 23
+Loudmouth: 12
+Spammer: 8
+QuietGuy: 4
+
+[Cleanup image]
+
+Augmented Eye | Janitorial Services
+```
+</Accordion>
+
+### Personality System
+
+The bot includes two types of responses:
+
+**Generic Quotes:**
+- "I'm not a janitor, you know."
+- "Do you people ever stop talking?"
+- "Cleaning up your mess. Again."
+- "Silence is golden. Expensive, but golden."
+- "This conversation was going nowhere anyway."
+
+**Scold Quotes** (when one user sent 4+ messages):
+- "**@User**, you never shut up, do you?"
+- "Half of this trash belonged to **@User**. Get a hobby."
+- "I'm looking at you, **@User**. You're the problem."
+- "If I had a dollar for every message **@User** sent, I'd retire."
+
+### Technical Implementation
+
+```javascript
+// Fetch messages and filter by age
+const messages = await bot.getMessages(interaction.channel.id, { limit: amount });
+const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+const userCounts = {};
+const messageIds = [];
+
+for (const msg of messages) {
+  if (msg.timestamp < twoWeeksAgo) continue;
+  messageIds.push(msg.id);
+  const authorName = msg.author.username;
+  userCounts[authorName] = (userCounts[authorName] || 0) + 1;
+}
+
+// Find top offender
+let topOffender = null;
+let maxCount = 0;
+for (const [user, count] of Object.entries(userCounts)) {
+  if (count > maxCount) {
+    maxCount = count;
+    topOffender = user;
+  }
+}
+
+// Bulk delete
+await bot.deleteMessages(interaction.channel.id, messageIds);
+```
+
+## Role Management
+
+### List Server Roles
+
+```bash
+/role list
+```
+
+Shows the complete role hierarchy with position numbers:
+
+```
+📜 Role Hierarchy (47)
+
+45 • @Admin 🚩
+44 • @Moderator 🚩
+32 • @VIP
+18 • @Member
+01 • @everyone
+
+Use /role move <target> <position> to reorder.
+```
+
+🚩 = Hoisted role (displayed separately)
+
+### Create New Role
+
+```bash
+/role create name:<name> hex:<color> [icon:<image>] [hoist:true/false] [mentionable:true/false]
+```
+
+**Parameters:**
+- `name` (required) - Role name
+- `hex` (required) - 6-digit hex code (e.g., `FF0055`)
+- `icon` (optional) - Role icon image (requires Server Level 2)
+- `hoist` (optional) - Display separately from online members
+- `mentionable` (optional) - Allow @mentions
+
+<Accordion title="Example: Create a VIP role">
+```bash
+/role create name:VIP hex:FFD700 hoist:true mentionable:false
+```
+
+**Response:**
+Shows a preview embed with confirmation buttons:
+```
+✨ Role Design Preview
+
+Name: VIP
+Color: #FFD700
+Hoisted: Yes
+Mentionable: No
+
+[Gold color preview image]
+
+[Create Role] [Cancel]
+```
+</Accordion>
+
+<Info>
+**Role Icons:** If you upload an icon but the server is below Level 2, the bot warns you and creates the role without the icon. If the server IS Level 2+, the bot converts the image to base64 and applies it.
+</Info>
+
+### Edit Existing Role
+
+```bash
+/role edit target:<role> [name:<new_name>] [color:<hex>] [icon:<image>] [hoist:true/false] [mentionable:true/false]
+```
+
+Update any combination of role properties:
+
+```javascript
+let updateData = {};
+if (newName) updateData.name = newName;
+if (newColorStr) updateData.color = parseInt(hexClean, 16);
+if (iconAttachment && guild.premiumTier >= 2) {
+  const buffer = await fetchImage(iconAttachment.url);
+  updateData.icon = `data:${iconAttachment.content_type};base64,${buffer.toString("base64")}`;
+}
+if (typeof hoist === "boolean") updateData.hoist = hoist;
+if (typeof mentionable === "boolean") updateData.mentionable = mentionable;
+
+await role.edit(updateData);
+```
+
+### Delete Role
+
+```bash
+/role delete target:<role>
+```
+
+**Safety Features:**
+- Requires confirmation button
+- Checks hierarchy (you can't delete roles above yours)
+- Checks bot hierarchy (bot can't delete roles above its highest role)
+
+```
+⚠️ WARNING: Deleting VIP.
+This cannot be undone.
+
+[Confirm] [Cancel]
+```
+
+### Assign Role to Multiple Users
+
+```bash
+/role assign role:<role> user1:<user> [user2:<user>] [user3:<user>] [user4:<user>] [user5:<user>]
+```
+
+Bulk assign a role to up to 5 users at once:
+
+```
+📋 Assignment Manifest
+
+Assigning @VIP to:
+
+Username#1234
+OtherUser#5678
+ThirdUser#9012
+
+[Confirm] [Cancel]
+```
+
+### Move Role in Hierarchy
+
+```bash
+/role move target:<role> position:<number>
+```
+
+Reposition a role by its absolute position number (use `/role list` to see positions):
+
+```bash
+/role move target:@VIP position:30
+```
+
+**Response:**
+```
+✅ VIP moved to position 30.
+```
+
+### Hierarchy Safety System
+
+All role operations check both user and bot hierarchy:
+
+```javascript
+// Check if user can manage target role
+canManage(member, targetRole, guild) {
+  if (member.id === guild.ownerID) return true;
+  return this.getHighestRolePos(member, guild) > targetRole.position;
+}
+
+// Check if bot can manage target role
+async checkBotHierarchy(bot, targetRole, guild) {
+  const botMember = await guild.getRESTMember(bot.user.id);
+  const botHighPos = this.getHighestRolePos(botMember, guild);
+  if (botHighPos <= targetRole.position) {
+    return {
+      ok: false,
+      message: `❌ Bot Hierarchy Error. I am below the target role.`
+    };
+  }
+  return { ok: true };
+}
+```
+
+## Server Audit System
+
+### Access Audit Menu
+
+```bash
+/audit
+```
+
+Opens an interactive forensics suite:
+
+```
+Jill Stingray // Forensics Suite
+
+Select a diagnostic module.
+
+Empty Node Scan: Identifies and purges roles with zero utilization.
+Identity Isolation: Tracks single-user roles for identity verification.
+Structure Analysis: Visualizes permission hierarchy.
+
+BTC-74 Certified
+
+[Scan Empty Nodes] [Check Isolations] [Analyze Structure]
+```
+
+### Empty Role Scanner
+
+Finds and deletes unused roles:
+
+1. **Scan Phase:** Identifies all roles with 0 members
+2. **Selection Phase:** Shows checklist of empty roles (up to 25 at once)
+3. **Confirmation Phase:** Delete selected roles
+
+```javascript
+const emptyRoles = guild.roles.filter((r) => {
+  if (r.managed || r.id === guild.id) return false;
+  const actualCount = guild.members.filter((m) =>
+    m.roles.includes(r.id)
+  ).length;
+  return actualCount === 0;
+});
+```
+
+**Interactive Checklist:**
+```
+Verification Required
+
+Found 12 empty nodes.
+
+Select roles to DELETE.
+
+Pending Deletion: 8 selected.
+
+[Multi-select dropdown]
+
+[DELETE SELECTED (8)] [Cancel]
+```
+
+### Identity Isolation Scanner
+
+Finds roles with exactly 1 member (useful for custom color roles):
+
+```
+Forensics: Identity Isolation
+
+Found 7 roles with single occupancy:
+
+`Custom-UserA` — @UserA
+`VIP-Premium` — @UserB
+`Special-Role` — @UserC
+
+[Return]
+```
+
+### Structure Analysis
+
+Displays role hierarchy with position numbers:
+
+```
+Structure Analysis
+
+50 Admin
+49 Moderator
+35 VIP
+20 Member
+10 Color-Red
+...
+
+[Return]
+```
+
+### Session Management
+
+The audit system uses a session-based approach:
+
+```javascript
+bot.pendingActions.set(interaction.member.id, {
+  type: "audit_session",
+  guildId: interaction.guildID,
+  step: "menu",
+  candidates: {} // Stores selected role IDs
+});
+```
+
+This allows multi-step workflows with the same user interaction.
+
+## Permission Checking
+
+All moderation commands use a centralized permission system:
+
+```javascript
+const Permissions = require("../utils/permissions");
+
+if (!(await Permissions.check(interaction, "purge"))) return;
+```
+
+The permission checker:
+1. Verifies the command exists in the server's config
+2. Checks if user has required role or permission
+3. Returns appropriate error messages
+
+<Warning>
+**Default Permissions:**
+- `/purge` - Requires Manage Messages permission
+- `/role` - Requires Manage Roles permission (MANAGE_ROLES = 0x10000000)
+- `/audit` - Requires Administrator permission
+
+Servers can customize these via the `/config` command.
+</Warning>
+
+## Visual Feedback
+
+All moderation actions include rich embeds:
+
+```javascript
+// Role creation success
+{
+  title: "✅ Role Design Preview",
+  description: `Name: ${name}\nColor: #${hex}`,
+  color: colorInt,
+  thumbnail: { url: iconUrl },
+  image: { url: colorPreviewUrl }
+}
+
+// Purge statistics
+{
+  title: "🧹 Cleanup Complete",
+  description: `Deleted ${count} messages.\n\n${flavorText}`,
+  color: 0xff0055,
+  image: { url: "attachment://cleanup.png" },
+  fields: [{
+    name: "The Noise Makers",
+    value: stats
+  }],
+  footer: { text: "Augmented Eye | Janitorial Services" }
+}
+```

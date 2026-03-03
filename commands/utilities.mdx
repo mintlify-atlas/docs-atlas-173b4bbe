@@ -1,0 +1,500 @@
+---
+title: Utility Commands
+description: General-purpose tools and information commands
+icon: wrench
+---
+
+## Help
+
+Browse the interactive command menu with detailed documentation.
+
+```
+/help
+```
+
+### Features
+
+- **Paginated Display**: 9 commands per page
+- **Interactive Selection**: Dropdown to view command details
+- **Page Jumping**: Quick navigation dropdown
+- **Detailed View**: Shows usage, arguments, and permissions
+- **Permission Indicators**: Visual permission requirements
+
+---
+
+## Ping
+
+Check bot latency and connection status.
+
+```
+/ping
+```
+
+**Response**: WebSocket latency in milliseconds.
+
+---
+
+## Server Info
+
+View detailed server information and statistics.
+
+```
+/serverinfo
+```
+
+### Information Displayed
+
+- Server name and description
+- Owner
+- Member count (approximate)
+- Creation date
+- Channel count
+- Role count
+- Verification level
+- Server icon and banner
+- Server ID
+
+---
+
+## User Info
+
+Pull up detailed user/member information.
+
+```
+/userinfo [user:<@user>]
+```
+
+<ParamField path="user" type="user">
+  The user to look up (defaults to you)
+</ParamField>
+
+### Information Displayed
+
+- Username and discriminator
+- User ID
+- Account creation date
+- Server join date
+- Role list (up to 1000 characters)
+- Avatar thumbnail
+
+---
+
+## Avatar
+
+Get high-resolution user avatar.
+
+```
+/avatar [user:<@user>]
+```
+
+<ParamField path="user" type="user">
+  The user to view (defaults to you)
+</ParamField>
+
+**Features**:
+- 4096x4096 resolution
+- Direct browser link
+- Embedded display
+
+---
+
+## ID Card
+
+Generate a Glitch City citizen ID card with rendered graphics.
+
+```
+/id [user:<@user>]
+```
+
+<ParamField path="user" type="user">
+  Check another citizen's ID (optional)
+</ParamField>
+
+### Features
+
+- **Custom Canvas Rendering**: 600x350px ID card
+- **Dynamic Information**:
+  - Username and UUID
+  - Occupation (highest role)
+  - Clearance level (based on permissions)
+  - Origin date (account creation)
+  - Citizen since (server join)
+  - Status indicator
+- **Visual Elements**:
+  - Role color accents
+  - Avatar integration
+  - Glitch effect overlays
+  - Barcode footer
+- **Custom Font**: VA-11 HALL-A themed typography
+
+### Clearance Levels
+
+- **Level 1 (CIV)**: Regular members
+- **Level 3 (SEC)**: Manage Messages permission
+- **Level 4 (EXEC)**: Manage Server permission
+- **Level 5 (OMNI)**: Administrator permission
+
+---
+
+## Wiki
+
+Search Wikipedia with comprehensive section navigation.
+
+```
+/wiki query:<search term>
+```
+
+<ParamField path="query" type="string" required>
+  The term to search for
+</ParamField>
+
+### Features
+
+- **Smart Search**: Disambiguation menu for multiple results
+- **Section Navigation**: Dropdown menu for all article sections
+- **Image Support**: Section-specific images from REST API
+- **Pagination**: Previous/Next buttons
+- **Fallback System**: Classic API if REST fails
+- **Session Recovery**: Reloads article if cache expires
+- **Rich Formatting**: Clean HTML-to-text conversion
+
+### Navigation
+
+1. Search returns multiple results → Select from dropdown
+2. Article loads with Introduction
+3. Use section dropdown to jump to specific sections
+4. Use Previous/Next for sequential reading
+5. Click "Read Article" for full Wikipedia page
+
+---
+
+## Emoji Stats
+
+Analyze server emoji usage with visual charts.
+
+### Top Emojis
+
+```
+/emojistats top
+```
+
+**Generates**:
+- Donut chart visualization
+- Top 10 emojis with percentages
+- Total usage count
+- Color-coded segments
+- Emoji icon overlays
+
+### Stale Emojis
+
+```
+/emojistats stale
+```
+
+Shows bottom 15 emojis by usage (candidates for removal).
+
+### Emoji Info
+
+```
+/emojistats info emoji:<emoji>
+```
+
+<ParamField path="emoji" type="string" required>
+  Paste the emoji to analyze
+</ParamField>
+
+**Shows**:
+- Total uses
+- Last seen date
+- Emoji name
+- Emoji preview
+
+---
+
+## Steal
+
+Clone emojis from other servers with bulk support.
+
+```
+/steal emoji:<emoji or URL> [rename:<new name>]
+```
+
+<ParamField path="emoji" type="string" required>
+  Paste emoji(s) or direct image URL. Supports multiple emojis at once.
+</ParamField>
+
+<ParamField path="rename" type="string">
+  New name(s). For bulk, separate with commas.
+</ParamField>
+
+### Features
+
+- **Bulk Support**: Paste multiple emojis at once
+- **URL Support**: Direct image links
+- **Batch Renaming**: Comma-separated names
+- **Animated Support**: Detects and preserves GIF format
+- **Session Pagination**: Navigate through bulk results
+- **Success Tracking**: Shows which emojis succeeded/failed
+- **Error Handling**: Detailed failure reasons
+
+### Examples
+
+```
+/steal emoji::customemoji:
+/steal emoji::emoji1: :emoji2: :emoji3: rename:new1, new2, new3
+/steal emoji:https://example.com/image.png rename:custom_name
+```
+
+<Warning>
+Requires **Manage Emojis** permission. Subject to Discord's emoji slot limits.
+</Warning>
+
+---
+
+## Threads
+
+Analyze active thread lifecycle and identify stale conversations.
+
+```
+/threads
+```
+
+### Features
+
+- **Activity Classification**:
+  - **Blooming**: Active within 24 hours
+  - **Active**: 1-3 days old
+  - **Stale**: 3+ days inactive
+- **Statistics**: Count per category
+- **Recommendations**: Suggests archiving stale threads
+- **Timestamps**: Relative time display
+
+---
+
+## Menu
+
+Browse the cocktail database from TheCocktailDB and VA-11 HALL-A.
+
+```
+/menu [category:<category>]
+```
+
+<ParamField path="category" type="choice" default="Cocktail">
+  Menu section to browse:
+  - Cocktails
+  - Ordinary Drinks
+  - Shots
+  - Coffee / Tea
+  - Specials (VA-11 HALL-A)
+  - Other / Unknown
+</ParamField>
+
+### Features
+
+- **Category Browsing**: Filter by drink type
+- **Pagination**: 20 drinks per page
+- **Recipe Viewer**: Select drink to see full recipe
+- **Two Sources**: TheCocktailDB + VA-11 HALL-A specials
+- **Ingredient Lists**: Detailed measurements
+- **Instructions**: Step-by-step preparation
+- **Images**: High-quality drink photos
+
+---
+
+## Tab
+
+View patron file and drinking history.
+
+```
+/tab [user:<@user>]
+```
+
+<ParamField path="user" type="user">
+  Check someone else's tab (optional)
+</ParamField>
+
+### Information Displayed
+
+- **The Usual**: Most frequently ordered drink
+- **Total Served**: Lifetime drink count
+- **Karmotrine Level**: Drinking tier (Sober → Legend)
+- **Last Sighting**: Most recent order date
+
+### Karmotrine Levels
+
+- **Sober**: 0-5 drinks
+- **Buzzed**: 6-20 drinks
+- **Tipsy**: 21-50 drinks
+- **Inebriated**: 51-100 drinks
+- **Glitch City Legend**: 100+ drinks
+
+---
+
+## Pulse
+
+View server activity analytics with 24-hour heatmap.
+
+```
+/pulse
+```
+
+### Analytics Displayed
+
+- **24h Heatmap**: Hourly activity visualization
+  - 🔴 Busy (&gt;80% of peak)
+  - 🟠 Active (&gt;50% of peak)
+  - 🟡 Moderate (&gt;20% of peak)
+  - 🟢 Low (&lt;20% of peak)
+  - ⚫ Empty
+- **Top Talkers**: Most messages sent (character count)
+- **Top Socialites**: Most mentions sent
+- **Hot Zones**: Most active channels
+- **Reset Timer**: Time until next 24h cycle
+
+---
+
+## Regulars
+
+View the bar's top patrons by drink orders.
+
+```
+/regulars
+```
+
+**Shows**:
+- Top 10 patrons by total drinks
+- Medal indicators (🥇🥈🥉)
+- Their favorite drink ("The Usual")
+- Total drink counts
+
+---
+
+## Streamline
+
+Search anime and manga using the Jikan API (MyAnimeList).
+
+### Search Anime
+
+```
+/streamline anime title:<title>
+```
+
+<ParamField path="title" type="string" required>
+  Title of the anime
+</ParamField>
+
+### Search Manga
+
+```
+/streamline manga title:<title>
+```
+
+<ParamField path="title" type="string" required>
+  Title of the manga
+</ParamField>
+
+### Features
+
+- **Contextual Commentary**: Jill's opinions based on score and genre
+- **Special Detection**: Extra commentary for mecha anime
+- **Information Displayed**:
+  - Score (out of 10)
+  - Type and episode count
+  - Air dates
+  - Genres
+  - Synopsis
+  - Cover image
+- **Direct Links**: MyAnimeList page
+
+---
+
+## Perms
+
+Generate custom permission invite link with interactive wizard.
+
+```
+/perms
+```
+
+### Features
+
+- **Interactive Toggles**: Dropdown to add/remove permissions
+- **Bitfield Calculator**: Shows calculated permission integer
+- **Required Indicators**: Marks essential permissions
+- **Permission Categories**:
+  - General Administration
+  - Moderation
+  - Content & Assets
+  - Basic Access
+- **One-Click Authorize**: Button to invite bot with selected permissions
+
+### Default Permissions
+
+- Manage Roles ⚠️ (required)
+- Embed Links ⚠️ (required)
+- View Channels
+- Send Messages
+- Read Message History
+- Kick Members
+- Ban Members
+- Manage Messages
+- Manage Threads
+
+---
+
+## Custom
+
+Manage your personal custom role with color, name, and icon.
+
+### Create Custom Role
+
+```
+/custom create name:<name> hex:<color> [icon:<attachment>]
+```
+
+<ParamField path="name" type="string" required>
+  Role name
+</ParamField>
+
+<ParamField path="hex" type="string" required>
+  Color hex code (e.g., "FF0055")
+</ParamField>
+
+<ParamField path="icon" type="attachment">
+  Role icon (requires Server Level 2)
+</ParamField>
+
+**Features**:
+- One role per user
+- Automatic positioning below bot's highest role
+- Overwrites existing custom role (with confirmation)
+- Removes palette color roles automatically
+- Soft cap: 100 custom roles (admins bypass)
+- Hard cap: 250 total
+
+### Edit Custom Role
+
+```
+/custom edit [name:<new name>] [hex:<new color>] [icon:<new icon>]
+```
+
+All parameters optional. Updates only specified fields.
+
+### Prune Custom Roles (Admin)
+
+```
+/custom prune [execute:<true/false>]
+```
+
+<ParamField path="execute" type="boolean" default="false">
+  Actually perform deletion (false = dry run)
+</ParamField>
+
+**Cleans up**:
+- Orphaned roles (user left server)
+- Desync entries (role manually deleted)
+- Shows statistics before deletion
+
+<Warning>
+Custom roles have a soft cap of 100 per server. After reaching this limit, only administrators can create new custom roles. All users can still edit their existing roles.
+</Warning>

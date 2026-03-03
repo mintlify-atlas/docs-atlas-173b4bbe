@@ -1,0 +1,345 @@
+---
+title: Moderation Commands
+description: Server management and moderation tools
+icon: shield
+---
+
+## Purge
+
+Bulk delete messages with statistics and witty commentary.
+
+```
+/purge amount:<2-100>
+```
+
+<ParamField path="amount" type="integer" required>
+  Number of messages to delete (2-100)
+</ParamField>
+
+### Features
+
+- **Bulk Deletion**: Delete up to 100 messages at once
+- **Age Filtering**: Automatically skips messages older than 14 days (Discord limitation)
+- **Statistics Tracking**: Shows who sent the most deleted messages
+- **Contextual Humor**: Jill's commentary adapts based on the "top offender"
+- **Visual Feedback**: Includes cleanup image and detailed embed
+
+### Example Output
+
+```
+Deleted 47 messages.
+
+"half of this trash belonged to @User. Get a hobby."
+
+The Noise Makers:
+@User1: 23
+@User2: 12
+@User3: 8
+```
+
+<Warning>
+Requires permission configuration. Default: **Manage Messages**
+</Warning>
+
+---
+
+## Audit
+
+Access server diagnostics and forensic tools for role management.
+
+```
+/audit
+```
+
+Opens an interactive forensics suite with multiple scan modules.
+
+---
+
+## Audit Modules
+
+### Empty Node Scan
+
+Identifies roles with zero members.
+
+**Features**:
+- Lists all empty roles
+- Excludes managed roles (bots, integrations)
+- Excludes @everyone
+- Interactive checklist for deletion
+- Batch deletion capability
+- Position-sorted display
+
+### Identity Isolation
+
+Tracks roles assigned to only one member.
+
+**Use Cases**:
+- Find personal/custom roles
+- Identify potential role cleanup targets
+- Verify single-user permissions
+
+### Structure Analysis
+
+Visualizes role hierarchy by position.
+
+**Shows**:
+- Top 15 roles by position
+- Position numbers for precise `/role move` commands
+- Hierarchy overview
+
+---
+
+## Navigation
+
+The audit interface uses buttons to switch between modules:
+- **Scan Empty Nodes**: Find unused roles
+- **Check Isolations**: View single-user roles
+- **Analyze Structure**: See hierarchy
+- **Return**: Go back to main menu
+
+<Warning>
+Requires permission configuration. Default: **Administrator**
+</Warning>
+
+---
+
+## Role
+
+Complete role management suite with create, delete, edit, move, assign, and list capabilities.
+
+### List Roles
+
+```
+/role list
+```
+
+Displays all server roles sorted by position with indicators.
+
+**Features**:
+- Position numbers (for use with `/role move`)
+- Hoisted role indicators (🚩)
+- Mention-formatted display
+- Pagination support
+
+### Create Role
+
+```
+/role create name:<name> hex:<color> [icon:<attachment>] [hoist:<true/false>] [mentionable:<true/false>]
+```
+
+<ParamField path="name" type="string" required>
+  Name of the role
+</ParamField>
+
+<ParamField path="hex" type="string" required>
+  Hex color code (e.g., "FF0055")
+</ParamField>
+
+<ParamField path="icon" type="attachment">
+  Role icon image (requires Server Level 2)
+</ParamField>
+
+<ParamField path="hoist" type="boolean" default="false">
+  Display separately from online members
+</ParamField>
+
+<ParamField path="mentionable" type="boolean" default="false">
+  Allow anyone to @mention this role
+</ParamField>
+
+**Features**:
+- Preview embed before creation
+- Confirmation button
+- Icon support for boosted servers
+- Color preview
+- Base64 icon encoding
+
+### Delete Role
+
+```
+/role delete target:<@role>
+```
+
+<ParamField path="target" type="role" required>
+  The role to delete
+</ParamField>
+
+**Safety**:
+- Confirmation required
+- Hierarchy checks (can't delete roles above yours)
+- Bot hierarchy validation
+- Irreversible warning
+
+### Edit Role
+
+```
+/role edit target:<@role> [name:<new name>] [color:<hex>] [icon:<attachment>] [hoist:<true/false>] [mentionable:<true/false>]
+```
+
+<ParamField path="target" type="role" required>
+  The role to edit
+</ParamField>
+
+All other parameters are optional. Only specified fields will be updated.
+
+**Features**:
+- Partial updates supported
+- Icon replacement for Level 2 servers
+- Hierarchy validation
+- Change summary in response
+
+### Move Role
+
+```
+/role move target:<@role> position:<number>
+```
+
+<ParamField path="target" type="role" required>
+  The role to move
+</ParamField>
+
+<ParamField path="position" type="integer" required>
+  New position number (see `/role list`)
+</ParamField>
+
+**Use**:
+1. Run `/role list` to see position numbers
+2. Use `/role move` with desired position
+3. Role hierarchy updates instantly
+
+### Assign Role
+
+```
+/role assign role:<@role> user1:<@user> [user2:<@user>] [user3:<@user>] [user4:<@user>] [user5:<@user>]
+```
+
+<ParamField path="role" type="role" required>
+  The role to assign
+</ParamField>
+
+<ParamField path="user1" type="user" required>
+  First user to receive the role
+</ParamField>
+
+**Features**:
+- Bulk assignment (up to 5 users at once)
+- Preview with avatars
+- Confirmation required
+- Success counter
+
+<Warning>
+All role commands require **Manage Roles** permission or higher.
+</Warning>
+
+---
+
+## Ghost
+
+Data integrity and forensics for database cleanup.
+
+```
+/ghost
+```
+
+Opens the data integrity protocol interface.
+
+---
+
+## Ghost Scan Modules
+
+### Scan Emotes
+
+Cross-references emoji database with current server emojis.
+
+**Finds**:
+- Emojis in database but deleted from server
+- Orphaned usage statistics
+- Ghost emoji IDs
+
+**Actions**:
+- View discrepancy report
+- Purge dead entries from database
+- Clean up emoji statistics
+
+### Scan Patrons
+
+Cross-references drink database with current members.
+
+**Finds**:
+- User IDs in drink logs who left the server
+- Orphaned patron statistics
+- Ghost user records
+
+**Actions**:
+- View missing patron list
+- Delete records for departed users
+- Maintain database hygiene
+
+---
+
+## Use Cases
+
+- **Database Maintenance**: Keep statistics accurate
+- **Storage Optimization**: Remove orphaned records
+- **Integrity Checks**: Verify data consistency
+- **Migration Cleanup**: Clean up after server changes
+
+<Warning>
+Requires permission configuration. Default: **Administrator**
+</Warning>
+
+---
+
+## Selfmute
+
+Banish yourself to the shadow realm with combined blind + timeout.
+
+```
+/selfmute minutes:<1-10080>
+```
+
+<ParamField path="minutes" type="integer" required>
+  Duration in minutes (1-10080 = 1 week max)
+</ParamField>
+
+### How It Works
+
+1. **Role Creation** (first use only):
+   - Creates "Jill-Blind" role
+   - Denies VIEW_CHANNEL on all channels
+   - Positions role below bot's highest role
+
+2. **Application**:
+   - Assigns Jill-Blind role
+   - Applies Discord timeout
+   - Saves to database
+
+3. **Removal** (automatic):
+   - Bot checks database every minute
+   - Removes role when timer expires
+   - Clears timeout
+
+### Features
+
+- **Total Isolation**: Can't see channels OR send messages
+- **Self-Imposed**: Only you can trigger it on yourself
+- **Automatic Removal**: No manual intervention needed
+- **One-Time Setup**: Role persists across uses
+- **Database Tracking**: Survives bot restarts
+
+### Example
+
+```
+/selfmute minutes:30
+```
+
+**Response**:
+```
+🌑 You should mute yourself, NOW!
+You are blinded and muted for 30 minutes.
+(See you at 3:45 PM)
+```
+
+<Note>
+This is a **voluntary** self-moderation tool. Users can only mute themselves, not others.
+</Note>

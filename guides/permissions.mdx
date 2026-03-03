@@ -1,0 +1,396 @@
+---
+title: Permission System
+description: Complete guide to configuring command permissions, channel restrictions, and role-based access control
+---
+
+## Overview
+
+Jill Stingray uses a sophisticated permission system that allows server administrators to control:
+
+- **Who** can use each command (permission levels)
+- **Where** commands can be used (channel whitelisting)
+- **Whether** commands are enabled or disabled
+
+All permission configuration is done through the `/config` command, which requires "Manage Server" permission by default.
+
+## Permission Levels
+
+The bot supports the following permission tiers:
+
+| Permission | Description | Discord Permission Required |
+|------------|-------------|-----------------------------|
+| Everyone | No restrictions | None |
+| Kick Members | Moderation actions | `KICK_MEMBERS` |
+| Ban Members | Moderation actions | `BAN_MEMBERS` |
+| Manage Messages | Message management | `MANAGE_MESSAGES` |
+| Manage Roles | Role management | `MANAGE_ROLES` |
+| Manage Server | Server configuration | `MANAGE_GUILD` |
+| Manage Emojis/Stickers | Emoji management | `MANAGE_GUILD_EXPRESSIONS` |
+| Administrator | Full server control | `ADMINISTRATOR` |
+| Developer Only | Bot owner exclusive | Special flag |
+
+### Permission Checking Logic
+
+From `utils/permissions.js:15-83`, the permission system:
+
+1. **Bot owner bypass** - Bot owner (set via `BOT_OWNER_ID` env var) bypasses all checks
+2. **Command-specific rules** - Checks custom permission requirements from database
+3. **Default fallback** - Uses the command's default permission level
+4. **Null/Everyone** - If permission is `null` or `"everyone"`, allows all users
+
+```js
+// Simplified permission check logic
+if (interaction.member.id === BOT_OWNER_ID) return true;
+
+if (!requiredPerm || requiredPerm === "everyone" || requiredPerm === "null")
+  return true;
+
+if (!interaction.member.permissions.has(requiredPerm)) {
+  await respond({
+    content: `🚫 **Access Denied.** You need the \`${readable}\` permission.`,
+    flags: 64,
+  });
+  return false;
+}
+```
+
+## Configuring Command Permissions
+
+### Setting Permission Requirements
+
+Use `/config permission` to set the minimum permission level for a command:
+
+```
+/config permission command:ping level:"Manage Server"
+```
+
+**Available options:**
+- Reset to Default
+- Administrator  
+- Manage Server
+- Manage Roles
+- Manage Messages
+- Kick Members
+- Ban Members
+- Everyone (None)
+
+From `commands/config.js:100-127`, these options are presented as autocomplete choices in the slash command.
+
+### Examples
+
+<CodeGroup>
+```bash Restrict ping to moderators
+/config permission command:ping level:"Manage Messages"
+```
+
+```bash Make userinfo admin-only
+/config permission command:userinfo level:Administrator
+```
+
+```bash Allow everyone to use avatar
+/config permission command:avatar level:"Everyone (None)"
+```
+
+```bash Reset to default settings
+/config permission command:mix level:"Reset to Default"
+```
+</CodeGroup>
+
+<Info>
+  When you reset to default, the bot uses the permission level defined in `utils/default.js` for that command.
+</Info>
+
+### Response Feedback
+
+The bot provides clear confirmation messages:
+
+```js
+// From commands/config.js:219-230
+if (level === "DEFAULT") {
+  delete rule.min_perm;
+  responseText = `✅ **${commandName}** permission reset to default.`;
+} else if (level === "null") {
+  rule.min_perm = null;
+  responseText = `✅ **${commandName}** is now available to **everyone**.`;
+} else {
+  rule.min_perm = level;
+  responseText = `✅ **${commandName}** now requires **${formatPerm(level)}**.`;
+}
+```
+
+## Channel Restrictions
+
+### Adding Channel Whitelists
+
+Restrict commands to specific channels using `/config channel`:
+
+```
+/config channel command:8ball action:"Add (Restrict)" channel:#bot-commands
+```
+
+This restricts the command to **only** the specified channel(s).
+
+### Removing Channel Restrictions
+
+```
+/config channel command:8ball action:"Remove (Relax)" channel:#bot-commands
+```
+
+Removes a channel from the whitelist. If the whitelist becomes empty, the command works globally again.
+
+### How Channel Restrictions Work
+
+From `commands/config.js:200-218` and `events/interactionCreate.js:50-55`:
+
+```js
+// Adding a channel
+if (!rule.allow_channels) rule.allow_channels = [];
+if (action === "add") {
+  if (!rule.allow_channels.includes(channelID)) {
+    rule.allow_channels.push(channelID);
+    responseText = `✅ **${commandName}** is now allowed in <#${channelID}>.`;
+  }
+}
+
+// Enforcement during command execution
+if (rule.allow_channels?.length > 0 && !rule.allow_channels.includes(interaction.channel.id)) {
+  return interaction.createMessage({
+    content: `🚫 **Restricted:** This command can only be used in <#${rule.allow_channels[0]}>.`,
+    flags: 64,
+  });
+}
+```
+
+<Warning>
+  Channel restrictions use a **whitelist** model. Once you add any channel, the command becomes restricted to those channels only. Global access is lost until all channels are removed from the list.
+</Warning>
+
+## Enabling and Disabling Commands
+
+### Toggle Command Status
+
+```
+/config toggle command:surprise status:false
+```
+
+Disables the command server-wide. Even administrators cannot use disabled commands (except `/config` itself, which cannot be disabled).
+
+```
+/config toggle command:surprise status:true
+```
+
+Re-enables the command.
+
+### Implementation Details
+
+From `commands/config.js:196-199` and `events/interactionCreate.js:44-49`:
+
+```js
+// Setting the status
+if (sub.name === "toggle") {
+  const status = getVal("status");
+  rule.enabled = status;
+  responseText = `✅ **${commandName}** is now **${status ? "ENABLED" : "DISABLED"}**.`;
+}
+
+// Enforcement
+if (rule.enabled === false && cmdName !== "config") {
+  return interaction.createMessage({
+    content: "🚫 **Disabled:** This command is globally disabled on this server.",
+    flags: 64,
+  });
+}
+```
+
+## Viewing Current Settings
+
+### Overview of All Commands
+
+```
+/config overview
+```
+
+Displays a paginated list showing:
+- 🟢/🔴 Status indicator (enabled/disabled)
+- **Command name**
+- Permission level
+- Channel restriction status
+
+Example output format from `commands/config.js:363-375`:
+
+```
+🟢 **ping**: Everyone | Global
+🟢 **avatar**: Everyone | Global
+🔴 **purge**: Manage Messages | Limited (2)
+🟢 **config**: Manage Server | Global
+```
+
+### Single Command Details
+
+```
+/config overview command:trigger
+```
+
+Shows detailed settings for one command:
+
+```js
+// From commands/config.js:318-352
+{
+  title: `${statusIcon} Settings: ${cmdName}`,
+  color: enabled ? 0x43b581 : 0xf04747,
+  fields: [
+    {
+      name: "Status",
+      value: `**${enabled ? "Enabled" : "Disabled"}**`,
+      inline: true,
+    },
+    {
+      name: "Permission",
+      value: `🔒 ${formatPerm(perm)}`,
+      inline: true,
+    },
+    {
+      name: "Allowed Channels",
+      value: channels.length > 0 
+        ? channels.map((id) => `<#${id}>`).join(", ") 
+        : "🌐 Global",
+      inline: false
+    },
+  ],
+}
+```
+
+## Advanced Configuration
+
+### Layered Permission System
+
+Permissions are resolved in this order (from `commands/config.js:296-316`):
+
+1. **Database override** - Custom settings from `/config permission`
+2. **Default rules** - Defined in `utils/default.js`
+3. **Command metadata** - The `default_member_permissions` field in command definition
+
+```js
+let perm = null;
+if (dbRule.hasOwnProperty("min_perm")) {
+  perm = dbRule.min_perm;  // Highest priority
+} else if (defRule.hasOwnProperty("min_perm")) {
+  perm = defRule.min_perm;  // Medium priority
+} else if (cmdObj && cmdObj.default_member_permissions) {
+  perm = cmdObj.default_member_permissions;  // Lowest priority
+}
+```
+
+### Settings Cache
+
+The bot caches permission settings for 60 seconds to reduce database queries:
+
+```js
+// From events/interactionCreate.js:20-38
+const cached = bot.settingsCache.get(interaction.guildID);
+if (cached) {
+  dbRules = cached.command_rules;
+  adminRole = cached.admin_role_id;
+} else {
+  const res = await db.query(
+    "SELECT command_rules, admin_role_id FROM guild_settings WHERE guild_id = $1",
+    [interaction.guildID]
+  );
+  const row = res.rows[0] || {};
+  dbRules = row.command_rules || {};
+  adminRole = row.admin_role_id;
+
+  bot.settingsCache.set(interaction.guildID, {
+    command_rules: dbRules,
+    admin_role_id: adminRole,
+  });
+  setTimeout(() => bot.settingsCache.delete(interaction.guildID), 60000);
+}
+```
+
+The cache is automatically cleared when settings are modified via `/config`.
+
+## Permission Format Reference
+
+From `commands/config.js:9-26`, these are the internal mappings:
+
+```js
+const PERM_MAP = {
+  8: "Administrator",
+  administrator: "Administrator",
+  32: "Manage Server",
+  manageGuild: "Manage Server",
+  268435456: "Manage Roles",
+  manageRoles: "Manage Roles",
+  manageGuildExpressions: "Manage Emojis/Stickers",
+  8192: "Manage Messages",
+  manageMessages: "Manage Messages",
+  2: "Kick Members",
+  kickMembers: "Kick Members",
+  4: "Ban Members",
+  banMembers: "Ban Members",
+  0: "Everyone",
+  everyone: "Everyone",
+  BOT_OWNER: "Developer Only",
+};
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Start restrictive, relax as needed">
+    Begin with tighter permissions and loosen them based on community feedback. It's easier to grant access than revoke it.
+  </Accordion>
+
+  <Accordion title="Use channel restrictions for spam prevention">
+    Limit fun commands like `/8ball`, `/surprise`, and `/mix` to dedicated bot channels to prevent spam in discussion channels.
+  </Accordion>
+
+  <Accordion title="Reserve admin commands appropriately">
+    Commands like `/config`, `/purge`, and `/role` should remain restricted to trusted moderators or administrators.
+  </Accordion>
+
+  <Accordion title="Document your server's permission structure">
+    Keep a reference of which roles have which Discord permissions, so you can properly configure bot command access.
+  </Accordion>
+
+  <Accordion title="Test changes with a moderator account">
+    After adjusting permissions, test with a non-admin account to verify the restrictions work as expected.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### "Access Denied" Messages
+
+If legitimate users are getting denied:
+
+1. Check the command's permission level: `/config overview command:commandname`
+2. Verify the user has the required Discord permission in their roles
+3. Ensure the command isn't disabled: check the status indicator
+4. Check channel restrictions if the error mentions channels
+
+### Settings Not Applying
+
+If permission changes don't take effect:
+
+1. Settings cache refreshes every 60 seconds - wait briefly
+2. The `/config` command automatically clears the cache on changes
+3. Check the database directly if issues persist
+
+### Commands Showing as "Everyone" When They Shouldn't
+
+This happens when:
+- Permission is explicitly set to `null` in database
+- Default rule has `min_perm: null`
+- No permission is defined anywhere
+
+Use `/config permission` with "Reset to Default" to restore the intended permission level.
+
+## Related Commands
+
+- `/help` - View all available commands and their descriptions
+- `/config toggle` - Enable or disable commands
+- `/config permission` - Set permission requirements  
+- `/config channel` - Configure channel restrictions
+- `/config overview` - View current settings

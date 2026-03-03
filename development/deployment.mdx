@@ -1,0 +1,483 @@
+---
+title: Deployment Guide
+description: Deploy Jill Stingray to production using Docker and environment configuration
+---
+
+## Overview
+
+Jill Stingray is designed to run in containerized environments using Docker. This guide covers deployment to production, including environment setup, Docker configuration, and hosting recommendations.
+
+## Prerequisites
+
+- Docker and Docker Compose (or container hosting platform)
+- PostgreSQL database (local or hosted)
+- Discord bot application and token
+- Supabase project (optional, for role icons)
+- Node.js 24+ (for local development)
+
+## Environment Variables
+
+Create a `.env` file in the project root with the following variables:
+
+```bash
+# Discord Configuration
+DISCORD_TOKEN=your_discord_bot_token_here
+
+# Database
+DATABASE_URL=postgresql://user:password@host:5432/database
+
+# Supabase (Optional)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your_service_role_key_here
+# Or use anon key if RLS is configured
+SUPABASE_KEY=your_anon_key_here
+
+# Server Configuration (Optional)
+PORT=8080  # Default: 8080
+```
+
+### Required Variables
+
+| Variable | Description | Example |
+|----------|-------------|----------|
+| `DISCORD_TOKEN` | Bot token from Discord Developer Portal | `MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.GaBcDe.FgHiJk...` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host:5432/db` |
+
+### Optional Variables
+
+| Variable | Description | Default |
+|----------|-------------|----------|
+| `SUPABASE_URL` | Supabase project URL | None (file uploads disabled) |
+| `SUPABASE_SERVICE_KEY` | Service role key (bypasses RLS) | Falls back to `SUPABASE_KEY` |
+| `SUPABASE_KEY` | Anon key (requires open RLS) | None |
+| `PORT` | HTTP keep-alive server port | `8080` |
+
+## Docker Deployment
+
+### Dockerfile Overview
+
+The included `Dockerfile` uses Node.js 24 Alpine for minimal image size:
+
+```dockerfile
+FROM node:24-alpine
+
+# Install system dependencies for canvas rendering
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    cairo-dev \
+    pango-dev \
+    giflib-dev \
+    jpeg-dev \
+    librsvg-dev \
+    fontconfig
+
+WORKDIR /app
+
+# Install dependencies (cached layer)
+COPY package*.json ./
+RUN npm install
+
+# Copy application code
+COPY . .
+
+# Start the bot
+CMD ["node", "index.js"]
+```
+
+### Why These Dependencies?
+
+- **python3, make, g++**: Required for building native Node.js modules
+- **cairo-dev, pango-dev, etc.**: Required by `@napi-rs/canvas` for image generation (used in `/palette`, `/geo`, etc.)
+- **fontconfig**: Font rendering support
+
+### Build the Image
+
+```bash
+docker build -t jill-stingray:latest .
+```
+
+### Run with Docker
+
+```bash
+docker run -d \
+  --name jill-stingray \
+  --env-file .env \
+  --restart unless-stopped \
+  -p 7860:7860 \
+  -p 8080:8080 \
+  jill-stingray:latest
+```
+
+**Ports:**
+- `7860` - Primary health check server
+- `8080` - Secondary health check server (configurable via `PORT`)
+
+### Docker Compose
+
+Create `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: jill-stingray
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "7860:7860"
+      - "8080:8080"
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16-alpine
+    container_name: jill-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: jill
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: jillbot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
+```
+
+Then run:
+
+```bash
+docker-compose up -d
+```
+
+**Update `DATABASE_URL` to:**
+```bash
+DATABASE_URL=postgresql://jill:changeme@db:5432/jillbot
+```
+
+## Database Setup
+
+### Using External PostgreSQL
+
+If using a hosted database (Supabase, Railway, Neon, etc.):
+
+1. Create a PostgreSQL database
+2. Copy the connection string
+3. Add to `.env` as `DATABASE_URL`
+4. Ensure SSL is enabled (the bot uses `ssl: { rejectUnauthorized: false }`)
+
+**Schema is created automatically** on first run via `utils/db.js::init()`.
+
+### Using Docker Compose
+
+The database container creates an empty PostgreSQL instance. Tables are created automatically when the bot starts.
+
+### Manual Schema Creation (Optional)
+
+If you need to create tables manually, extract the schema from `utils/db.js:12-127`.
+
+## Health Checks
+
+The bot runs two HTTP servers for health monitoring:
+
+### Primary Server (Port 7860)
+
+Defined in `index.js:10-17`:
+
+```javascript
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Jill Stingray is Online!');
+});
+
+server.listen(7860, () => {
+  console.log(`Keep-Alive server listening on port ${port}`);
+});
+```
+
+### Secondary Server (Port 8080)
+
+Defined in `index.js:100-105`:
+
+```javascript
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Jill Stingray is mixing drinks...\n');
+}).listen(process.env.PORT || 8080);
+```
+
+### Testing Health Checks
+
+```bash
+curl http://localhost:7860  # Should return: Jill Stingray is Online!
+curl http://localhost:8080  # Should return: Jill Stingray is mixing drinks...
+```
+
+## Hosting Platforms
+
+### Railway
+
+1. Create new project from GitHub repo
+2. Add PostgreSQL plugin
+3. Set environment variables in Railway dashboard
+4. Railway auto-detects the Dockerfile
+
+**DATABASE_URL** is automatically injected by the PostgreSQL plugin.
+
+### Render
+
+1. Create new Web Service
+2. Connect GitHub repository
+3. Set **Docker** as environment
+4. Add PostgreSQL database (separate service)
+5. Link database and set environment variables
+
+### Fly.io
+
+1. Install Fly CLI: `brew install flyctl`
+2. Login: `fly auth login`
+3. Launch: `fly launch`
+4. Set secrets: `fly secrets set DISCORD_TOKEN=...`
+5. Attach Postgres: `fly postgres create` and `fly postgres attach`
+
+### Google Cloud Run
+
+1. Build image: `gcloud builds submit --tag gcr.io/PROJECT_ID/jill-stingray`
+2. Deploy: `gcloud run deploy jill-stingray --image gcr.io/PROJECT_ID/jill-stingray`
+3. Set environment variables in Cloud Run console
+4. Use Cloud SQL for PostgreSQL
+
+### Self-Hosted (VPS)
+
+On Ubuntu/Debian server:
+
+```bash
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# Clone repository
+git clone https://github.com/yourusername/jill-stingray.git
+cd jill-stingray
+
+# Create .env file
+nano .env  # Add your variables
+
+# Run with Docker Compose
+docker-compose up -d
+
+# View logs
+docker-compose logs -f bot
+```
+
+## Production Checklist
+
+- [ ] Create Discord bot application
+- [ ] Enable all required intents (Server Members, Message Content)
+- [ ] Set up PostgreSQL database
+- [ ] Configure environment variables
+- [ ] Set up Supabase (optional, for role icons)
+- [ ] Build and test Docker image locally
+- [ ] Deploy to hosting platform
+- [ ] Verify health check endpoints respond
+- [ ] Invite bot to Discord server
+- [ ] Test slash command registration
+- [ ] Monitor logs for errors
+
+## Monitoring & Logs
+
+### Docker Logs
+
+```bash
+# View live logs
+docker logs -f jill-stingray
+
+# View last 100 lines
+docker logs --tail 100 jill-stingray
+
+# With Docker Compose
+docker-compose logs -f bot
+```
+
+### Startup Logs
+
+Successful startup shows:
+
+```
+--- Jill Stingray Boot Sequence ---
+[DB] PostgreSQL Connected & Synced.
+[CMD] Loaded /ping
+[CMD] Loaded /help
+...
+[EVT] Loaded event: ready
+[EVT] Loaded event: interactionCreate
+...
+Keep-Alive server listening on port 7860
+Jill Stingray is online. (User: Jill Stingray)
+Mixing drinks and changing lives.
+✅ Successfully synced all commands globally!
+```
+
+### Error Logs
+
+The crash handler logs unhandled errors:
+
+```
+[Anti-Crash] :: Unhandled Rejection/Catch
+[Anti-Crash] :: Uncaught Exception/Catch
+```
+
+These prevent the bot from crashing but should be investigated.
+
+## Updating the Bot
+
+### Docker Compose
+
+```bash
+git pull origin main
+docker-compose down
+docker-compose build
+docker-compose up -d
+```
+
+### Docker (Manual)
+
+```bash
+git pull origin main
+docker build -t jill-stingray:latest .
+docker stop jill-stingray
+docker rm jill-stingray
+docker run -d --name jill-stingray --env-file .env jill-stingray:latest
+```
+
+### Zero-Downtime Updates
+
+For production, use:
+
+```bash
+docker-compose up -d --no-deps --build bot
+```
+
+This rebuilds and restarts only the bot service.
+
+## Scaling Considerations
+
+### Horizontal Scaling
+
+Discord bots **cannot be horizontally scaled** (multiple instances) without complex sharding:
+
+- Use vertical scaling (more CPU/RAM)
+- Optimize database queries
+- Use caching for frequently accessed data
+
+### Database Optimization
+
+- Enable connection pooling (already configured)
+- Add indexes for frequently queried columns
+- Use `EXPLAIN ANALYZE` to optimize slow queries
+- Consider read replicas for analytics queries
+
+### Memory Management
+
+The bot uses:
+- In-memory caches (`bot.settingsCache`, `bot.pendingActions`)
+- Cached member data (loaded on `ready` event)
+
+Monitor memory usage:
+
+```bash
+docker stats jill-stingray
+```
+
+## Troubleshooting
+
+### Bot Not Connecting
+
+**Check:**
+- `DISCORD_TOKEN` is correct
+- Bot has required intents enabled in Discord Developer Portal
+- Network connectivity to Discord API
+
+**Logs to look for:**
+```
+Error: Unauthorized (401)
+```
+
+### Database Connection Failed
+
+**Check:**
+- `DATABASE_URL` format is correct
+- Database server is reachable
+- SSL settings match database requirements
+
+**Logs to look for:**
+```
+[DB] Initialization Failed: connection refused
+```
+
+### Commands Not Appearing
+
+**Check:**
+- Slash commands are synced (look for "✅ Successfully synced" in logs)
+- Bot has `applications.commands` scope
+- Wait up to 1 hour for global command sync
+
+**Force re-sync:**
+Restart the bot. Commands are synced on every startup.
+
+### Role Icons Not Working
+
+**Check:**
+- Server has Level 2 boost (required for role icons)
+- `SUPABASE_SERVICE_KEY` is set (not just `SUPABASE_KEY`)
+- RLS policies allow uploads to `role-icons` bucket
+
+**Warning in logs:**
+```
+⚠️ WARNING: SUPABASE_SERVICE_KEY not found. Uploads might fail if Bucket RLS is not open.
+```
+
+## Security Best Practices
+
+- **Never commit `.env` files** to version control
+- Use **secrets management** in production (Railway secrets, Docker secrets, etc.)
+- **Rotate tokens** periodically
+- Use **environment-specific tokens** (dev vs. prod)
+- Enable **2FA** on Discord developer account
+- **Restrict database access** to bot's IP range
+- Use **read-only database users** where possible
+- Keep **dependencies updated** (`npm audit fix`)
+
+## Backup Strategy
+
+### Database Backups
+
+With Docker Compose:
+
+```bash
+# Backup
+docker exec jill-postgres pg_dump -U jill jillbot > backup_$(date +%Y%m%d).sql
+
+# Restore
+docker exec -i jill-postgres psql -U jill jillbot < backup_20260303.sql
+```
+
+With hosted database: Use provider's backup features.
+
+### Configuration Backups
+
+- Keep `.env.example` in repository (without secrets)
+- Document custom guild settings
+- Export trigger keywords before major updates
+
+## Next Steps
+
+- [Architecture](/development/architecture) - Understand the codebase
+- [Database Schema](/development/database) - Learn about data structures
+- [Commands](/commands/overview) - Explore available commands

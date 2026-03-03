@@ -1,0 +1,455 @@
+---
+title: Database & Storage
+description: PostgreSQL schema, Supabase integration, and data management
+---
+
+## Overview
+
+Jill Stingray uses **PostgreSQL** as its primary database for persistent storage and **Supabase** for file storage (primarily role icons). All database operations use connection pooling for performance.
+
+## Database Connection
+
+The PostgreSQL connection is established in `utils/db.js:3-6`:
+
+```javascript
+const { Pool } = require('pg');
+
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+```
+
+### Environment Variables
+
+```bash
+DATABASE_URL=postgresql://user:password@host:5432/database
+```
+
+The connection string should include all authentication details.
+
+## Schema Initialization
+
+Tables are created automatically on bot startup by the `init()` function in `utils/db.js:8-133`:
+
+```javascript
+async function init() {
+  // Create all tables with IF NOT EXISTS
+  console.log('[DB] PostgreSQL Connected & Synced.');
+}
+```
+
+This ensures the database schema is always up-to-date.
+
+## Database Schema
+
+### Guild Settings
+
+Stores per-guild configuration.
+
+```sql
+CREATE TABLE IF NOT EXISTS guild_settings (
+    guild_id TEXT PRIMARY KEY,
+    admin_role_id TEXT,
+    log_channel_id TEXT,
+    command_rules JSONB DEFAULT '{}'::jsonb
+);
+```
+
+**Fields:**
+- `guild_id` - Discord guild (server) ID
+- `admin_role_id` - Role that can manage bot settings
+- `log_channel_id` - Channel for audit logs
+- `command_rules` - JSON object with command-specific permissions
+
+**Used by:** Permission system, config command
+
+### Activity Tracking
+
+Tracks user message activity across guilds.
+
+```sql
+CREATE TABLE IF NOT EXISTS activity (
+    guild_id TEXT,
+    user_id TEXT,
+    chars INTEGER DEFAULT 0,
+    msg_count INTEGER DEFAULT 0,
+    PRIMARY KEY (guild_id, user_id)
+);
+```
+
+**Fields:**
+- `guild_id` + `user_id` - Composite primary key
+- `chars` - Total characters sent
+- `msg_count` - Total message count
+
+**Updated by:** `events/activityTracker.js:18-28`
+
+**Used by:** `/regulars`, `/pulse`, activity statistics
+
+### Analytics (Daily)
+
+Stores hourly activity heatmaps and channel statistics.
+
+```sql
+CREATE TABLE IF NOT EXISTS analytics_daily (
+    guild_id TEXT PRIMARY KEY,
+    data JSONB,
+    last_reset BIGINT
+);
+```
+
+**JSONB Structure:**
+```json
+{
+  "heatmap": [0, 5, 12, ...],  // 24 hourly counts
+  "channels": {
+    "channel_id": 42,           // Message count per channel
+  },
+  "users": {
+    "user_id": {
+      "msgCount": 10,
+      "chars": 450,
+      "mentions": 2
+    }
+  }
+}
+```
+
+**Reset:** Every 24 hours (86400000ms)
+
+**Used by:** `/pulse` dashboard
+
+### Emoji Tracking
+
+Tracks custom emoji usage statistics.
+
+```sql
+CREATE TABLE IF NOT EXISTS emojis (
+    guild_id TEXT,
+    emoji_id TEXT,
+    name TEXT,
+    is_animated BOOLEAN,
+    count INTEGER DEFAULT 0,
+    last_used BIGINT,
+    PRIMARY KEY (guild_id, emoji_id)
+);
+```
+
+**Fields:**
+- `emoji_id` - Discord emoji ID
+- `name` - Emoji name (updates if renamed)
+- `is_animated` - Whether emoji is animated
+- `count` - Total usage count
+- `last_used` - Timestamp of last use
+
+**Updated by:** `events/emojiTracker.js:3-21`
+
+**Used by:** `/emojistats`
+
+### Custom Roles
+
+Tracks user-created custom roles.
+
+```sql
+CREATE TABLE IF NOT EXISTS custom_roles (
+    guild_id TEXT,
+    user_id TEXT,
+    role_id TEXT,
+    PRIMARY KEY (guild_id, user_id)
+);
+```
+
+**Constraints:**
+- One custom role per user per guild
+- Role is deleted from Discord when user leaves
+
+**Used by:** `/custom create`, `/custom edit`, `/custom prune`
+
+### Pending Custom Actions
+
+Temporary storage for confirmation dialogs.
+
+```sql
+CREATE TABLE IF NOT EXISTS pending_custom_actions (
+    user_id TEXT PRIMARY KEY,
+    guild_id TEXT,
+    new_name TEXT,
+    new_color INTEGER,
+    old_role_id TEXT
+);
+```
+
+**Purpose:** Stores staged changes when overwriting existing custom roles
+
+**Cleared:** After confirmation or cancellation
+
+### Drinks Tracking
+
+Tracks VA-11 HALL-A themed drink orders.
+
+```sql
+CREATE TABLE IF NOT EXISTS drinks (
+    user_id TEXT,
+    guild_id TEXT,
+    drink_name TEXT,
+    count INTEGER DEFAULT 0,
+    last_ordered BIGINT,
+    PRIMARY KEY (user_id, guild_id, drink_name)
+);
+```
+
+**Used by:** `/mix`, `/menu`, `/tab`
+
+### Active Mutes
+
+Tracks temporary self-mutes.
+
+```sql
+CREATE TABLE IF NOT EXISTS active_mutes (
+    user_id VARCHAR(32),
+    guild_id VARCHAR(32),
+    role_id VARCHAR(32),
+    expires_at BIGINT
+);
+```
+
+**Managed by:** `events/muteLoop.js` (checks every 60 seconds)
+
+**Used by:** `/selfmute`
+
+### Dangeru Posts
+
+Anonymous imageboard system.
+
+```sql
+CREATE TABLE IF NOT EXISTS dangeru_posts (
+    id SERIAL PRIMARY KEY,
+    tripcode TEXT,
+    content TEXT,
+    author_id TEXT,
+    timestamp BIGINT
+);
+
+CREATE TABLE IF NOT EXISTS dangeru_config (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
+```
+
+**Used by:** `/dangeru` (disabled by default)
+
+### Alias Logging
+
+Tracks username and nickname changes.
+
+```sql
+CREATE TABLE IF NOT EXISTS aliases (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT,
+    guild_id TEXT,
+    old_name TEXT,
+    new_name TEXT,
+    timestamp BIGINT
+);
+```
+
+**Updated by:** `events/aliasLog.js`
+
+**Used by:** `/identity`
+
+### Trigger System
+
+Custom auto-response keywords.
+
+```sql
+CREATE TABLE IF NOT EXISTS triggers (
+    id SERIAL PRIMARY KEY,
+    guild_id TEXT,
+    keyword TEXT,
+    response TEXT,
+    is_image BOOLEAN DEFAULT FALSE,
+    case_sensitive BOOLEAN DEFAULT FALSE,
+    UNIQUE(guild_id, keyword)
+);
+```
+
+**Constraints:**
+- One keyword per guild (case-insensitive by default)
+- Supports both text and image URLs
+
+**Used by:** `/trigger add`, `/trigger remove`, `events/triggerHandler.js`
+
+## Query Patterns
+
+### Insert or Update (UPSERT)
+
+Most tables use `ON CONFLICT ... DO UPDATE` for atomic upserts:
+
+```javascript
+await db.query(`
+  INSERT INTO activity (guild_id, user_id, chars, msg_count)
+  VALUES ($1, $2, $3, 1)
+  ON CONFLICT (guild_id, user_id)
+  DO UPDATE SET
+    chars = activity.chars + $3,
+    msg_count = activity.msg_count + 1
+`, [guildId, userId, charCount]);
+```
+
+### Querying with Exported Function
+
+The `db.js` module exports a `query` function:
+
+```javascript
+const { query } = require('../utils/db');
+
+const res = await query(
+  'SELECT * FROM guild_settings WHERE guild_id = $1',
+  [guildId]
+);
+const settings = res.rows[0];
+```
+
+### Accessing the Pool Directly
+
+```javascript
+const { db } = require('../utils/db');
+
+const client = await db.connect();
+try {
+  await client.query('BEGIN');
+  // Multiple queries
+  await client.query('COMMIT');
+} catch (e) {
+  await client.query('ROLLBACK');
+} finally {
+  client.release();
+}
+```
+
+## Supabase Integration
+
+Supabase is used for file storage, primarily for custom role icons.
+
+### Client Setup
+
+`utils/supabase.js:1-14`:
+
+```javascript
+const { createClient } = require('@supabase/supabase-js');
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+module.exports = { supabase };
+```
+
+### Environment Variables
+
+```bash
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key
+```
+
+**Important:** Use `SUPABASE_SERVICE_KEY` for server-side operations to bypass Row Level Security (RLS).
+
+### Usage Example
+
+```javascript
+const { supabase } = require('../utils/supabase');
+
+// Upload file
+const { data, error } = await supabase.storage
+  .from('role-icons')
+  .upload(`${guildId}/${userId}.png`, buffer, {
+    contentType: 'image/png',
+    upsert: true
+  });
+
+// Get public URL
+const { publicURL } = supabase.storage
+  .from('role-icons')
+  .getPublicUrl(`${guildId}/${userId}.png`);
+```
+
+## Database Exports
+
+`utils/db.js:137-141`:
+
+```javascript
+module.exports = {
+  db,                                        // Pool instance
+  init,                                      // Schema initialization
+  query: (text, params) => db.query(text, params)  // Query shorthand
+};
+```
+
+## Best Practices
+
+### Always Use Parameterized Queries
+
+```javascript
+// Good
+await query('SELECT * FROM users WHERE id = $1', [userId]);
+
+// Bad (SQL injection risk)
+await query(`SELECT * FROM users WHERE id = '${userId}'`);
+```
+
+### Handle Errors Gracefully
+
+```javascript
+try {
+  await query('INSERT INTO ...', [...]);
+} catch (err) {
+  console.error('Database error:', err);
+  // Don't expose raw error to users
+  return interaction.createMessage({
+    content: '❌ Database error occurred.',
+    flags: 64
+  });
+}
+```
+
+### Use Transactions for Multi-Step Operations
+
+```javascript
+const client = await db.connect();
+try {
+  await client.query('BEGIN');
+  await client.query('DELETE FROM custom_roles WHERE user_id = $1', [userId]);
+  await client.query('INSERT INTO custom_roles VALUES ($1, $2)', [userId, roleId]);
+  await client.query('COMMIT');
+} catch (e) {
+  await client.query('ROLLBACK');
+  throw e;
+} finally {
+  client.release();
+}
+```
+
+## Migration Strategy
+
+The bot uses "run-on-startup" migrations via `IF NOT EXISTS`. For schema changes:
+
+1. Add new `CREATE TABLE IF NOT EXISTS` or `ALTER TABLE` to `init()`
+2. Changes apply automatically on next restart
+3. No manual migration files needed
+
+**For destructive changes:** Use manual migration scripts in production.
+
+## Performance Considerations
+
+- **Connection pooling** is enabled by default
+- **Guild settings are cached** for 60 seconds to reduce queries
+- **Activity tracking uses upserts** to avoid race conditions
+- **JSONB columns** store complex data without joins
+- **Composite primary keys** optimize multi-guild queries
+
+## Next Steps
+
+- [Architecture](/development/architecture) - Understand the bot structure
+- [Deployment](/development/deployment) - Set up production database

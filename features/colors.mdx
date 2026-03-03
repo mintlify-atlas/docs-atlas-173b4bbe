@@ -1,0 +1,329 @@
+---
+title: 'Color Palette System'
+description: 'Let users pick from a curated color palette or extract colors from images with advanced analysis tools'
+icon: 'palette'
+---
+
+## Overview
+
+Jill Stingray offers two powerful color systems:
+
+1. **Public Palette** - Pre-defined color roles users can self-assign
+2. **Palette Extraction** - Extract and analyze dominant colors from any image
+
+These systems work together to give servers beautiful color customization without admin overhead.
+
+## Public Color Palette
+
+### Setup (Admin Only)
+
+```bash
+/colors setup
+```
+
+**What it does:**
+- Creates 40 pre-defined color roles
+- Positions them correctly in role hierarchy (below bot's highest role)
+- Posts an interactive selection menu with dropdown menus
+- Automatically handles role conflicts
+
+<Warning>
+**Permission Requirements:**
+- User must have Administrator permission
+- Bot must have "Manage Roles" permission
+- Bot's role must be above the color roles in hierarchy
+</Warning>
+
+### Available Colors
+
+The palette includes 40 carefully curated colors split into two categories:
+
+<Tabs>
+  <Tab title="Warm & Vivid">
+    - 🟥 **Absolute Red** - `#FF0000`
+    - 🩸 **Crimson** - `#990000`
+    - 🧱 **Brick** - `#B22222`
+    - 🌹 **Rose** - `#FF007F`
+    - 🏩 **Hot Pink** - `#FF69B4`
+    - 🌸 **Pastel Pink** - `#FFD1DC`
+    - 🍣 **Coral** - `#FF7F50`
+    - 🟧 **Orange** - `#FF8000`
+    - 🍊 **Tangerine** - `#F28500`
+    - 🍑 **Peach** - `#FFCC99`
+    - 👑 **Gold** - `#FFD700`
+    - 🟨 **Yellow** - `#FFFF00`
+    - 🍦 **Cream** - `#FFFDD0`
+    - 🍯 **Amber** - `#FFBF00`
+    - 🟫 **Brown** - `#8B4513`
+    - 🍫 **Chocolate** - `#D2691E`
+    - 📜 **Beige** - `#F5F5DC`
+    - 🎒 **Maroon** - `#800000`
+    - 🍒 **Cherry** - `#DE3163`
+    - 🍥 **Salmon** - `#FA8072`
+  </Tab>
+  
+  <Tab title="Cool & Dark">
+    - 🌲 **Forest Green** - `#228B22`
+    - ✳️ **Emerald** - `#50C878`
+    - 🥎 **Lime** - `#32CD32`
+    - 🌿 **Mint** - `#98FF98`
+    - 🥝 **Olive** - `#808000`
+    - 🦆 **Teal** - `#008080`
+    - 💧 **Cyan** - `#00FFFF`
+    - ☁️ **Sky Blue** - `#87CEEB`
+    - 🧢 **Royal Blue** - `#4169E1`
+    - ⚓ **Navy** - `#000080`
+    - 🌑 **Midnight** - `#191970`
+    - 🎮 **Blurple** - `#5865F2`
+    - 🟪 **Purple** - `#800080`
+    - 🔮 **Violet** - `#EE82EE`
+    - 🍬 **Lavender** - `#E6E6FA`
+    - 🍇 **Plum** - `#DDA0DD`
+    - ⬜ **White** - `#FFFFFF`
+    - 🥈 **Silver** - `#C0C0C0`
+    - 🖇️ **Grey** - `#808080`
+    - 🖤 **Void (Black)** - `#010101`
+  </Tab>
+</Tabs>
+
+### User Selection
+
+Once setup is complete, users see a permanent message:
+
+```
+🎨 Public Color Palette
+
+Select a color below to update your identity.
+
+⚠️ Note: Selecting a color here will remove your /custom role.
+
+[Dropdown: Warm & Vivid Colors]
+[Dropdown: Cool & Dark Colors]
+```
+
+**User Experience:**
+1. Select a color from either dropdown
+2. Bot removes any other palette colors they have
+3. Bot removes any custom role (from `/custom` command)
+4. Bot applies the selected color
+5. User receives confirmation with color preview
+
+<Accordion title="Example: Selecting 'Hot Pink'">
+**User Action:** Select "Hot Pink" from dropdown
+
+**Bot Response:**
+```
+🏩 Applied: Hot Pink
+
+🎨 Applied: Hot Pink
+
+Hex: #FF69B4
+
+[Color preview thumbnail]
+```
+</Accordion>
+
+### Technical Implementation
+
+#### Role Creation with Hierarchy
+
+The setup system intelligently positions roles:
+
+```javascript
+// Find bot's highest role
+const botMember = await guild.getRESTMember(bot.user.id);
+const botHighRole = assignedRoles.sort((a, b) => 
+  b.position - a.position
+)[0];
+
+if (botHighRole) {
+  // Stack colors below bot's role
+  targetPosition = Math.max(1, botHighRole.position - 1);
+}
+
+// Create roles in reverse order to maintain stack
+const stackPalette = [...PALETTE].reverse();
+
+for (const color of stackPalette) {
+  const newRole = await guild.createRole({
+    name: `Palette: ${color.label}`,
+    color: color.hex,
+    permissions: 0,
+    mentionable: false,
+    hoist: false
+  });
+  
+  await newRole.editPosition(targetPosition);
+  targetPosition++;
+}
+```
+
+#### Custom Role Removal
+
+When a user selects a palette color, their custom role (if any) is deleted:
+
+```javascript
+const res = await db.query(
+  "SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2",
+  [guild.id, member.id]
+);
+
+if (customEntry) {
+  await bot.deleteRole(guild.id, customEntry.role_id, 
+    "Replaced by Public Palette"
+  );
+  await db.query(
+    "DELETE FROM custom_roles WHERE guild_id = $1 AND user_id = $2",
+    [guild.id, member.id]
+  );
+}
+```
+
+## Palette Extraction
+
+### Extract Colors from Image
+
+```bash
+/palette image:<attachment> [amount:1-10] [sort:dominant|hue|luminance]
+```
+
+**Parameters:**
+- `image` (required) - Upload any image or GIF
+- `amount` (optional) - Number of colors to extract (Default: 5, Max: 10)
+- `sort` (optional) - How to order the palette:
+  - `dominant` - By frequency in image (default)
+  - `hue` - Rainbow order (red → orange → yellow → green → blue → purple)
+  - `luminance` - Light to dark
+
+<Accordion title="Example: Extract 7 colors sorted by hue">
+```bash
+/palette image:[upload] amount:7 sort:hue
+```
+
+**Response:**
+- Generates a horizontal color ribbon image
+- Each color strip shows its hex code vertically
+- Interactive dropdown to view details for each color
+- Pantone color matching via TheColorAPI
+</Accordion>
+
+### Color Analysis Details
+
+Select any color from the dropdown to see:
+
+```
+Color Details: #FF0055
+
+Closest Pantone Match: Process Magenta (#FF0090)
+
+[400x100 solid color preview]
+```
+
+### Technical Implementation
+
+#### Color Quantization Algorithm
+
+Uses the **median cut algorithm** via the `quantize` library:
+
+```javascript
+// Downsample image for performance
+const sampleSize = 50;
+const tempCanvas = createCanvas(sampleSize, sampleSize);
+const tempCtx = tempCanvas.getContext("2d");
+tempCtx.drawImage(img, 0, 0, sampleSize, sampleSize);
+
+// Extract pixel data (skip transparent pixels)
+const imgData = tempCtx.getImageData(0, 0, sampleSize, sampleSize).data;
+const pixelArray = [];
+for (let i = 0; i < imgData.length; i += 4) {
+  if (imgData[i + 3] >= 125) {
+    pixelArray.push([imgData[i], imgData[i + 1], imgData[i + 2]]);
+  }
+}
+
+// Quantize to N dominant colors
+const colorMap = quantize(pixelArray, amount);
+let colors = colorMap.palette().map(rgb => chroma(rgb));
+```
+
+#### Sorting Modes
+
+```javascript
+if (sortMode === "hue") {
+  colors.sort((a, b) => a.hsl()[0] - b.hsl()[0]);
+} else if (sortMode === "luminance") {
+  colors.sort((a, b) => b.luminance() - a.luminance());
+}
+// Default: dominant (no sort, uses quantize order)
+```
+
+#### Ribbon Image Generation
+
+Creates a sleek vertical-text ribbon:
+
+```javascript
+const width = 800;
+const height = 500;
+const canvas = createCanvas(width, height);
+const ctx = canvas.getContext("2d");
+const swatchWidth = width / colors.length;
+
+colors.forEach((color, index) => {
+  const startX = index * swatchWidth;
+  const hex = color.hex().toUpperCase();
+  
+  // Draw color strip
+  ctx.fillStyle = hex;
+  ctx.fillRect(startX, 0, swatchWidth, height);
+  
+  // Vertical hex label
+  ctx.save();
+  ctx.translate(startX + (swatchWidth / 2), height - 30);
+  ctx.rotate(-Math.PI / 2); // 90° counter-clockwise
+  ctx.fillStyle = color.luminance() > 0.5 ? 
+    "rgba(0, 0, 0, 0.8)" : "rgba(255, 255, 255, 0.9)";
+  ctx.font = "26px PaletteFont";
+  ctx.fillText(hex, 0, 0);
+  ctx.restore();
+});
+```
+
+#### Pantone Matching
+
+Uses TheColorAPI for closest named color matches:
+
+```javascript
+const colorAPI = await axios.get(
+  `https://www.thecolorapi.com/id?hex=${hexNoHash}`
+);
+const pantoneName = colorAPI.data.name.value;
+const pantoneHex = colorAPI.data.name.closest_named_hex;
+```
+
+## Color Preview Generation
+
+Both systems use `singlecolorimage.com` for instant color previews:
+
+```javascript
+const hexClean = colorDef.hex.toString(16).toUpperCase().padStart(6, '0');
+const previewUrl = `https://dummyimage.com/250x250/${hexClean}/${hexClean}.png`;
+```
+
+<Info>
+The palette extraction feature uses a custom font (`data/id/font.ttf`) for the vertical hex labels, giving the color ribbon a unique cyberpunk aesthetic matching the VA-11 HALL-A theme.
+</Info>
+
+## Database Integration
+
+Custom roles are tracked in PostgreSQL:
+
+```sql
+CREATE TABLE custom_roles (
+  guild_id TEXT,
+  user_id TEXT,
+  role_id TEXT,
+  PRIMARY KEY (guild_id, user_id)
+);
+```
+
+This allows the bot to clean up custom roles when users switch to palette colors.

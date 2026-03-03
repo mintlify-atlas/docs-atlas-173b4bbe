@@ -1,0 +1,302 @@
+---
+title: Bot Architecture
+description: Technical architecture and code structure of the Jill Stingray Discord bot
+---
+
+## Overview
+
+Jill Stingray is built on the **Eris** Discord library, a lightweight and performant alternative to Discord.js. The bot uses a modular architecture with separate command and event systems, PostgreSQL for persistent storage, and Supabase for file storage.
+
+## Core Technologies
+
+- **Discord Library**: Eris v0.17.2
+- **Runtime**: Node.js 24
+- **Database**: PostgreSQL (via `pg` driver)
+- **Storage**: Supabase
+- **Process Management**: Custom crash handler
+- **Key Libraries**: `@napi-rs/canvas`, `chroma-js`, `axios`
+
+## Project Structure
+
+```
+/
+├── index.js              # Main entry point
+├── crashHandler.js       # Error handling and recovery
+├── commands/             # Slash command modules
+├── events/              # Discord event handlers  
+├── utils/               # Shared utilities
+│   ├── db.js           # PostgreSQL connection & schema
+│   ├── supabase.js     # Supabase client
+│   ├── default.js      # Default command permissions
+│   ├── permissions.js  # Permission checking
+│   └── cacheWarmer.js  # Cache management
+├── data/               # Static data files
+├── package.json        # Dependencies
+└── Dockerfile          # Container configuration
+```
+
+## Bot Initialization
+
+The bot follows a sequential startup process defined in `index.js:91-109`:
+
+1. **Database Initialization** - Connect to PostgreSQL and create tables
+2. **Command Loading** - Load all command modules from `/commands`
+3. **Event Loading** - Register all event handlers from `/events`
+4. **HTTP Server** - Start keep-alive server on port 7860 and 8080
+5. **Discord Connection** - Connect to Discord gateway
+
+```javascript
+(async () => {
+  await init();              // Database setup
+  loadCommands();            // Load commands
+  loadEvents();              // Load events
+  http.createServer(...);    // Health check server
+  bot.connect();             // Connect to Discord
+})();
+```
+
+## Eris Configuration
+
+The bot is instantiated in `index.js:22-31` with specific intents and settings:
+
+```javascript
+const bot = new Eris(TOKEN, {
+  intents: [
+    "guilds",
+    "guildMessages",
+    "messageContent",      // Required for prefix commands
+    "guildMessageReactions",
+    "guildMembers",
+  ],
+  restMode: true,           // Use REST for all requests
+});
+```
+
+### Bot Instance Properties
+
+The bot object is extended with custom properties in `index.js:33-36`:
+
+- `bot.commands` - Map of loaded slash commands
+- `bot.prefixMap` - Map of command prefixes to command names
+- `bot.pendingActions` - Temporary storage for multi-step interactions
+- `bot.settingsCache` - Cached guild settings (60s TTL)
+
+## Command System
+
+### Command Structure
+
+All commands follow this structure:
+
+```javascript
+module.exports = {
+  name: "commandname",
+  description: "Command description",
+  options: [],  // Slash command options
+  prefixes: [], // Optional: prefix triggers
+  
+  async execute(interaction, bot) {
+    // Command logic
+  },
+  
+  // Optional handlers
+  async handleComponent(interaction, bot, action, args) {},
+  async handleModal(interaction, bot) {},
+  async autocomplete(interaction, bot) {}
+}
+```
+
+### Command Loading
+
+Commands are loaded dynamically from the `/commands` directory in `index.js:38-61`:
+
+```javascript
+const loadCommands = () => {
+  const commandFiles = fs.readdirSync(commandsPath)
+    .filter(file => file.endsWith('.js'));
+  
+  for (const file of commandFiles) {
+    const command = require(`./commands/${file}`);
+    if (command.name && command.execute) {
+      bot.commands.set(command.name, command);
+      
+      // Register prefix mappings
+      if (command.prefixes && Array.isArray(command.prefixes)) {
+        for (const prefix of command.prefixes) {
+          bot.prefixMap.set(prefix, command.name);
+        }
+      }
+    }
+  }
+}
+```
+
+### Command Execution Flow
+
+Commands are executed through the interaction router in `events/interactionCreate.js:6-89`:
+
+1. **Permission Checking** - Validate permissions using guild settings
+2. **Rule Enforcement** - Check channel restrictions and enable status
+3. **Command Execution** - Call the command's `execute()` function
+4. **Error Handling** - Catch and log errors gracefully
+
+## Event System
+
+### Event Structure
+
+Events follow this structure:
+
+```javascript
+module.exports = {
+  name: "eventName",     // Discord event name
+  once: false,           // true for one-time events
+  async execute(...args, bot) {
+    // Event handler logic
+  }
+}
+```
+
+### Event Loading
+
+Events are registered in `index.js:63-82`:
+
+```javascript
+const loadEvents = () => {
+  const eventFiles = fs.readdirSync(eventsPath)
+    .filter(file => file.endsWith('.js'));
+  
+  for (const file of eventFiles) {
+    const event = require(`./events/${file}`);
+    if (event.name && event.execute) {
+      if (event.once) {
+        bot.once(event.name, (...args) => event.execute(...args, bot));
+      } else {
+        bot.on(event.name, (...args) => event.execute(...args, bot));
+      }
+    }
+  }
+}
+```
+
+### Core Events
+
+| Event | File | Purpose |
+|-------|------|----------|
+| `ready` | `ready.js` | Sync slash commands, start status rotation |
+| `interactionCreate` | `interactionCreate.js` | Handle slash commands and components |
+| `messageCreate` | `activityTracker.js` | Track user activity metrics |
+| `messageCreate` | `emojiTracker.js` | Track emoji usage |
+| `messageCreate` | `triggerHandler.js` | Auto-respond to keywords |
+| `messageCreate` | `aliasLog.js` | Log username changes |
+| `guildMemberRemove` | `guildMemberRemove.js` | Cleanup custom roles |
+| `error` | `error.js` | Log Discord gateway errors |
+
+## Interaction Router
+
+The interaction router (`events/interactionCreate.js`) handles all Discord interactions:
+
+### Command Interactions
+
+Handled in `interactionCreate.js:10-89`. Includes permission gating using:
+
+- Guild-specific command rules from database
+- Default rules from `utils/default.js`
+- Admin role bypass system
+- Channel restrictions
+
+### Component Interactions
+
+Handled in `interactionCreate.js:105-136`. Uses a custom routing system:
+
+```
+custom_id format: "command:action:arg1:arg2"
+```
+
+Example: `"custom:confirm_overwrite"` routes to `commands/custom.js::handleComponent()`
+
+### Autocomplete Interactions
+
+Handled in `interactionCreate.js:92-102`. Calls command-specific autocomplete handlers.
+
+### Modal Interactions
+
+Handled in `interactionCreate.js:139-154`. Routes modal submissions to command handlers.
+
+## Settings & Caching
+
+Guild settings are cached to reduce database queries in `interactionCreate.js:20-38`:
+
+```javascript
+const cached = bot.settingsCache.get(interaction.guildID);
+if (cached) {
+  dbRules = cached.command_rules;
+  adminRole = cached.admin_role_id;
+} else {
+  // Load from database and cache for 60s
+  bot.settingsCache.set(interaction.guildID, settings);
+  setTimeout(() => bot.settingsCache.delete(interaction.guildID), 60000);
+}
+```
+
+## Error Handling
+
+The bot includes a global crash handler in `crashHandler.js:1-16`:
+
+```javascript
+process.on('unhandledRejection', (reason, p) => {
+  console.log('[Anti-Crash] :: Unhandled Rejection/Catch');
+  console.log(reason, p);
+});
+
+process.on('uncaughtException', (err, origin) => {
+  console.log('[Anti-Crash] :: Uncaught Exception/Catch');
+  console.log(err, origin);
+});
+```
+
+This prevents the bot from crashing on unhandled errors and logs them for debugging.
+
+## Keep-Alive Server
+
+Two HTTP servers run for health checks:
+
+1. **Primary Server** (Port 7860) - Returns "Jill Stingray is Online!"
+2. **Secondary Server** (Port 8080 or `process.env.PORT`) - Returns "Jill Stingray is mixing drinks..."
+
+These allow hosting platforms to verify the bot is running.
+
+## Status Rotation
+
+The bot cycles through status messages every 30 seconds in `events/ready.js:33-47`:
+
+```javascript
+const activities = [
+  { name: "VA-11 HALL-A OST", type: 2 },        // Listening
+  { name: "Time to mix drinks and change lives.", type: 0 },  // Playing
+  { name: "customers at the bar", type: 3 },   // Watching
+  { name: "Fore", type: 5 },                   // Competing
+];
+```
+
+## Command Registration
+
+Slash commands are synced globally and to test guilds on startup in `events/ready.js:8-68`:
+
+```javascript
+const slashCommands = bot.commands.map(cmd => ({
+  name: cmd.name,
+  description: cmd.description,
+  options: cmd.options || [],
+  type: 1  // CHAT_INPUT
+}));
+
+// Sync globally
+await bot.bulkEditCommands(slashCommands);
+
+// Sync to test guilds
+await bot.bulkEditGuildCommands(TEST_GUILD_ID, commandData);
+```
+
+## Next Steps
+
+- [Database Schema](/development/database) - Learn about data storage
+- [Deployment](/development/deployment) - Deploy the bot to production

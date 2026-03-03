@@ -1,0 +1,565 @@
+---
+title: Configuration
+description: Environment variables and configuration guide for Jill Stingray
+---
+
+## Environment Variables
+
+Jill Stingray uses environment variables for all configuration. Create a `.env` file in the project root with the following settings.
+
+### Required Variables
+
+These variables are **required** for the bot to function:
+
+<ParamField path="DISCORD_TOKEN" type="string" required>
+  Discord bot token from the [Developer Portal](https://discord.com/developers/applications).
+  
+  ```javascript index.js (Line 20)
+  const TOKEN = process.env.DISCORD_TOKEN;
+  ```
+  
+  **Example:**
+  ```bash
+  DISCORD_TOKEN=MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.GhIjKl.MnOpQrStUvWxYz1234567890AbCdEfGhIjKl
+  ```
+</ParamField>
+
+<ParamField path="DATABASE_URL" type="string" required>
+  PostgreSQL connection string for persistent data storage.
+  
+  ```javascript utils/db.js (Line 4)
+  connectionString: process.env.DATABASE_URL,
+  ```
+  
+  **Format:**
+  ```bash
+  DATABASE_URL=postgresql://username:password@host:port/database_name
+  ```
+  
+  **Examples:**
+  ```bash
+  # Local PostgreSQL
+  DATABASE_URL=postgresql://postgres:password@localhost:5432/jillbot
+  
+  # Supabase
+  DATABASE_URL=postgresql://postgres:[password]@db.[project].supabase.co:5432/postgres
+  
+  # Railway
+  DATABASE_URL=postgresql://postgres:password@containers-us-west-123.railway.app:5432/railway
+  ```
+  
+  <Note>
+  The bot automatically creates all required tables on startup. No manual schema setup needed.
+  </Note>
+</ParamField>
+
+### Optional API Keys
+
+These variables enable specific features:
+
+<ParamField path="SUPABASE_URL" type="string">
+  Supabase project URL for cloud storage (image uploads, palette generation).
+  
+  ```javascript utils/supabase.js (Line 5)
+  const supabaseUrl = process.env.SUPABASE_URL;
+  ```
+  
+  **Example:**
+  ```bash
+  SUPABASE_URL=https://abcdefghijklmnop.supabase.co
+  ```
+  
+  <Info>
+  Required for `/palette` command and any features that upload images to cloud storage.
+  </Info>
+</ParamField>
+
+<ParamField path="SUPABASE_SERVICE_KEY" type="string">
+  Supabase service role key for bypassing Row Level Security (RLS).
+  
+  ```javascript utils/supabase.js (Line 6)
+  const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
+  ```
+  
+  **Example:**
+  ```bash
+  SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+  ```
+  
+  <Warning>
+  If not set, the bot falls back to `SUPABASE_KEY` (anon key). This may cause upload failures if your Supabase bucket has RLS enabled.
+  
+  ```javascript utils/supabase.js (Lines 8-10)
+  if (!process.env.SUPABASE_SERVICE_KEY) {
+    console.warn("⚠️ WARNING: SUPABASE_SERVICE_KEY not found. Uploads might fail if Bucket RLS is not open.");
+  }
+  ```
+  </Warning>
+</ParamField>
+
+<ParamField path="MAPILLARY_TOKEN" type="string">
+  Mapillary API token for Geoguessr street imagery.
+  
+  ```javascript commands/geo.js (Line 24)
+  const MAPILLARY_TOKEN = process.env.MAPILLARY_TOKEN;
+  ```
+  
+  **Get a token:** [Mapillary Developer Portal](https://www.mapillary.com/developer)
+  
+  **Example:**
+  ```bash
+  MAPILLARY_TOKEN=MLY|1234567890|abcdefghijklmnopqrstuvwxyz
+  ```
+  
+  <Info>
+  **Without this token:**
+  - Geoguessr falls back to cached locations from `data/fallback_cache.json`
+  - If cache is empty, uses hardcoded Tokyo location
+  
+  **With this token:**
+  - Fetches random street-level imagery globally
+  - Supports Africa, Asia, Americas, Europe, and Oceania regions
+  </Info>
+</ParamField>
+
+<ParamField path="GROQ_API_KEY" type="string">
+  Groq API key for AI-powered 8ball responses.
+  
+  ```javascript commands/8ball.js (Line 6)
+  const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  ```
+  
+  **Get a key:** [Groq Console](https://console.groq.com)
+  
+  **Example:**
+  ```bash
+  GROQ_API_KEY=gsk_abcdefghijklmnopqrstuvwxyz1234567890
+  ```
+  
+  <Info>
+  Only required for `/8ball` command. Other commands function normally without it.
+  </Info>
+</ParamField>
+
+<ParamField path="BOT_OWNER_ID" type="string">
+  Your Discord user ID for bot owner permissions.
+  
+  ```javascript utils/permissions.js (Line 3)
+  const BOT_OWNER_ID = process.env.BOT_OWNER_ID;
+  ```
+  
+  **Find your ID:**
+  1. Enable Developer Mode in Discord (User Settings → Advanced)
+  2. Right-click your username → Copy ID
+  
+  **Example:**
+  ```bash
+  BOT_OWNER_ID=123456789012345678
+  ```
+  
+  <Tip>
+  Owner-only commands include:
+  - `/purge` - Bulk message deletion
+  - `/audit` - System audit logs
+  - Developer utilities
+  </Tip>
+</ParamField>
+
+<ParamField path="PORT" type="number" default="8080">
+  HTTP server port for health checks and keep-alive.
+  
+  ```javascript index.js (Line 105)
+  .listen(process.env.PORT || 8080);
+  ```
+  
+  **Example:**
+  ```bash
+  PORT=8080
+  ```
+  
+  The bot exposes a simple HTTP endpoint that responds with:
+  ```
+  Jill Stingray is mixing drinks...
+  ```
+</ParamField>
+
+## Example Configuration
+
+<CodeGroup>
+
+```bash .env (Minimal)
+# Minimal configuration - Core features only
+DISCORD_TOKEN=your_discord_bot_token_here
+DATABASE_URL=postgresql://user:password@host:5432/database
+BOT_OWNER_ID=123456789012345678
+PORT=8080
+```
+
+```bash .env (Full)
+# Full configuration - All features enabled
+DISCORD_TOKEN=your_discord_bot_token_here
+DATABASE_URL=postgresql://user:password@host:5432/database
+
+# Supabase (for image uploads and storage)
+SUPABASE_URL=https://yourproject.supabase.co
+SUPABASE_SERVICE_KEY=your_supabase_service_key_here
+
+# Mapillary (for Geoguessr)
+MAPILLARY_TOKEN=MLY|1234567890|your_token_here
+
+# Groq (for AI 8ball)
+GROQ_API_KEY=gsk_your_groq_api_key_here
+
+# Bot Owner
+BOT_OWNER_ID=123456789012345678
+
+# Server Port
+PORT=8080
+```
+
+```bash .env (Production)
+# Production configuration with external services
+DISCORD_TOKEN=${DISCORD_TOKEN}
+DATABASE_URL=${DATABASE_URL}
+SUPABASE_URL=${SUPABASE_URL}
+SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+MAPILLARY_TOKEN=${MAPILLARY_TOKEN}
+GROQ_API_KEY=${GROQ_API_KEY}
+BOT_OWNER_ID=123456789012345678
+PORT=${PORT:-8080}
+
+# Note: In production, use environment variables from your platform
+# (Railway, Heroku, etc.) instead of .env file
+```
+
+</CodeGroup>
+
+## Feature Requirements
+
+Different features require different environment variables:
+
+<AccordionGroup>
+  <Accordion title="Core Bot Features">
+    **Required:**
+    - `DISCORD_TOKEN`
+    - `DATABASE_URL`
+    
+    **Enables:**
+    - All basic commands (`/help`, `/ping`, `/userinfo`, etc.)
+    - Moderation tools (`/mute`, `/role`, `/purge`)
+    - Activity tracking and regulars system
+    - Custom role management
+    - Trigger system
+  </Accordion>
+
+  <Accordion title="Drink Mixing">
+    **Required:**
+    - `DISCORD_TOKEN`
+    - `DATABASE_URL`
+    
+    **Optional:**
+    - None (uses TheCocktailDB public API)
+    
+    **Enables:**
+    - `/mix classic` - Real-world cocktails
+    - `/mix special` - VA-11 HALL-A drinks
+    - `/menu` - Browse drink database
+    - `/tab` - View drink order history
+    
+    **Data Files:**
+    - `data/va11_drinks.json` - VA-11 HALL-A drink recipes
+    - `data/images/*.png` - Drink images
+  </Accordion>
+
+  <Accordion title="Geoguessr">
+    **Required:**
+    - `DISCORD_TOKEN`
+    - `DATABASE_URL`
+    
+    **Optional:**
+    - `MAPILLARY_TOKEN` - For live street imagery
+    
+    **Enables:**
+    - `/geo host` - Start Geoguessr game
+    - `/geo quit` - End game
+    - Interactive map navigation
+    - Live scoring and leaderboards
+    
+    **Fallback Behavior:**
+    ```javascript commands/geo.js (Lines 476-485)
+    async getFailsafeLocation(updateStatus) {
+      if (FALLBACK_CACHE && FALLBACK_CACHE.length > 0) {
+        console.log("[Geo] Using Cache Hit.");
+        return FALLBACK_CACHE[Math.floor(Math.random() * FALLBACK_CACHE.length)];
+      }
+      return this.getFallback(); // Tokyo, Japan
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Color Palettes">
+    **Required:**
+    - `DISCORD_TOKEN`
+    - `DATABASE_URL`
+    - `SUPABASE_URL`
+    - `SUPABASE_SERVICE_KEY`
+    
+    **Enables:**
+    - `/palette` - Generate color palettes from images
+    - Image upload to Supabase storage
+    - Public URL generation
+    
+    **Canvas Dependency:**
+    Uses `@napi-rs/canvas` for image processing and palette extraction.
+  </Accordion>
+
+  <Accordion title="AI 8ball">
+    **Required:**
+    - `DISCORD_TOKEN`
+    - `DATABASE_URL`
+    - `GROQ_API_KEY`
+    
+    **Enables:**
+    - `/8ball` - AI-powered fortune telling
+    - Groq LLaMA model integration
+    
+    **Model:**
+    ```javascript
+    model: "llama-3.3-70b-versatile"
+    ```
+    
+    **Fallback:**
+    If Groq fails, uses static responses from `data/8ball_responses.json`
+  </Accordion>
+</AccordionGroup>
+
+## Database Configuration
+
+The bot automatically creates these tables on startup:
+
+<CodeGroup>
+
+```sql guild_settings
+CREATE TABLE IF NOT EXISTS guild_settings (
+    guild_id TEXT PRIMARY KEY,
+    admin_role_id TEXT,
+    log_channel_id TEXT,
+    command_rules JSONB DEFAULT '{}'::jsonb
+);
+```
+
+```sql activity
+CREATE TABLE IF NOT EXISTS activity (
+    guild_id TEXT,
+    user_id TEXT,
+    chars INTEGER DEFAULT 0,
+    msg_count INTEGER DEFAULT 0,
+    PRIMARY KEY (guild_id, user_id)
+);
+```
+
+```sql drinks
+CREATE TABLE IF NOT EXISTS drinks (
+    user_id TEXT,
+    guild_id TEXT,
+    drink_name TEXT,
+    count INTEGER DEFAULT 0,
+    last_ordered BIGINT,
+    PRIMARY KEY (user_id, guild_id, drink_name)
+);
+```
+
+```sql custom_roles
+CREATE TABLE IF NOT EXISTS custom_roles (
+    guild_id TEXT,
+    user_id TEXT,
+    role_id TEXT,
+    PRIMARY KEY (guild_id, user_id)
+);
+```
+
+```sql triggers
+CREATE TABLE IF NOT EXISTS triggers (
+    id SERIAL PRIMARY KEY,
+    guild_id TEXT,
+    keyword TEXT,
+    response TEXT,
+    is_image BOOLEAN DEFAULT FALSE,
+    case_sensitive BOOLEAN DEFAULT FALSE,
+    UNIQUE(guild_id, keyword)
+);
+```
+
+</CodeGroup>
+
+<Note>
+See `utils/db.js` (Lines 8-133) for the complete database initialization code.
+</Note>
+
+## Supabase Setup
+
+If using Supabase for image storage:
+
+<Steps>
+  <Step title="Create Supabase Project">
+    Sign up at [supabase.com](https://supabase.com) and create a new project.
+  </Step>
+
+  <Step title="Create Storage Bucket">
+    Go to **Storage** in the Supabase dashboard and create a new bucket:
+    
+    - Name: `jill-stingray` (or your preferred name)
+    - Public: **Yes** (required for Discord embeds)
+    - File size limit: 50MB
+  </Step>
+
+  <Step title="Get API Credentials">
+    Go to **Settings → API**:
+    
+    - Copy **Project URL** → `SUPABASE_URL`
+    - Copy **service_role key** → `SUPABASE_SERVICE_KEY`
+    
+    <Warning>
+    Use the **service_role** key, not the **anon** key. The service role bypasses Row Level Security.
+    </Warning>
+  </Step>
+
+  <Step title="Configure Bucket Policy">
+    If you prefer using the anon key, set up RLS policies:
+    
+    ```sql
+    -- Allow public uploads
+    CREATE POLICY "Public Upload"
+    ON storage.objects FOR INSERT
+    TO public
+    WITH CHECK (bucket_id = 'jill-stingray');
+    
+    -- Allow public reads
+    CREATE POLICY "Public Read"
+    ON storage.objects FOR SELECT
+    TO public
+    USING (bucket_id = 'jill-stingray');
+    ```
+  </Step>
+</Steps>
+
+## Validation
+
+Verify your configuration:
+
+<Tabs>
+  <Tab title="Check Environment">
+    ```bash
+    # Print all environment variables (sanitized)
+    node -e "require('dotenv').config(); console.log({
+      DISCORD_TOKEN: process.env.DISCORD_TOKEN ? '✅ Set' : '❌ Missing',
+      DATABASE_URL: process.env.DATABASE_URL ? '✅ Set' : '❌ Missing',
+      SUPABASE_URL: process.env.SUPABASE_URL || '⚠️ Optional',
+      MAPILLARY_TOKEN: process.env.MAPILLARY_TOKEN || '⚠️ Optional',
+      GROQ_API_KEY: process.env.GROQ_API_KEY || '⚠️ Optional',
+      BOT_OWNER_ID: process.env.BOT_OWNER_ID || '⚠️ Not set'
+    })"
+    ```
+  </Tab>
+
+  <Tab title="Test Database">
+    ```bash
+    # Test PostgreSQL connection
+    psql $DATABASE_URL -c "SELECT version();"
+    
+    # List tables after bot runs
+    psql $DATABASE_URL -c "\dt"
+    ```
+    
+    Expected tables:
+    - guild_settings
+    - activity
+    - drinks
+    - custom_roles
+    - active_mutes
+    - triggers
+    - emojis
+    - dangeru_posts
+    - aliases
+  </Tab>
+
+  <Tab title="Check Bot Logs">
+    ```bash
+    # Docker
+    docker logs jill-stingray | grep -E "\[DB\]|\[CMD\]|\[EVT\]"
+    
+    # PM2
+    pm2 logs jill-stingray --lines 50 | grep -E "\[DB\]|\[CMD\]|\[EVT\]"
+    ```
+    
+    Look for:
+    ```
+    [DB] PostgreSQL Connected & Synced.
+    [Loader] Successfully loaded 25 VA-11 HALL-A drinks.
+    [CMD] Loaded /mix
+    [EVT] Loaded event: ready
+    ✅ Synced 25 Global Commands.
+    ```
+  </Tab>
+</Tabs>
+
+## Security Best Practices
+
+<Warning>
+**Never commit `.env` files to version control!**
+
+Add to `.gitignore`:
+```bash .gitignore
+.env
+.env.local
+.env.production
+```
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="Rotate Tokens" icon="rotate">
+    Regenerate Discord bot tokens and API keys if exposed
+  </Card>
+  <Card title="Use Service Role" icon="key">
+    Always use Supabase service_role key for server-side operations
+  </Card>
+  <Card title="Restrict Database" icon="database">
+    Use SSL and IP whitelisting for production databases
+  </Card>
+  <Card title="Environment Variables" icon="lock">
+    Use platform environment variables in production, not .env files
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Server Setup"
+    icon="server"
+    href="/guides/server-setup"
+  >
+    Configure admin roles and server-specific settings
+  </Card>
+  <Card
+    title="Commands"
+    icon="terminal"
+    href="/commands/overview"
+  >
+    Browse the complete command reference
+  </Card>
+  <Card
+    title="Features"
+    icon="sparkles"
+    href="/features/drinks"
+  >
+    Explore drink mixing and other features
+  </Card>
+  <Card
+    title="Deployment"
+    icon="rocket"
+    href="/development/deployment"
+  >
+    Deploy to production with Railway, Heroku, or VPS
+  </Card>
+</CardGroup>

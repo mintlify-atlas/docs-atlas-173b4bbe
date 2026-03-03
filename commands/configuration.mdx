@@ -1,0 +1,300 @@
+---
+title: Configuration Commands
+description: Bot configuration and custom server features
+icon: gear
+---
+
+## Config
+
+Manage bot settings and command permissions for your server.
+
+### Toggle Command
+
+```
+/config toggle command:<command> status:<true/false>
+```
+
+<ParamField path="command" type="string" required>
+  The command to configure (autocomplete enabled)
+</ParamField>
+
+<ParamField path="status" type="boolean" required>
+  Enable (true) or disable (false) the command
+</ParamField>
+
+**Example**:
+```
+/config toggle command:8ball status:false
+```
+
+---
+
+### Channel Restrictions
+
+```
+/config channel command:<command> action:<add/remove> channel:<#channel>
+```
+
+<ParamField path="command" type="string" required>
+  The command to configure (autocomplete enabled)
+</ParamField>
+
+<ParamField path="action" type="choice" required>
+  - `add`: Restrict command to this channel (whitelist)
+  - `remove`: Remove channel from whitelist
+</ParamField>
+
+<ParamField path="channel" type="channel" required>
+  The target channel
+</ParamField>
+
+**How It Works**:
+- By default, commands work in all channels (Global)
+- Adding a channel creates a whitelist (command only works in listed channels)
+- Removing all channels returns to Global mode
+
+**Example**:
+```
+/config channel command:geo action:add channel:#games
+/config channel command:geo action:add channel:#bot-commands
+```
+
+---
+
+### Permission Requirements
+
+```
+/config permission command:<command> level:<permission>
+```
+
+<ParamField path="command" type="string" required>
+  The command to configure (autocomplete enabled)
+</ParamField>
+
+<ParamField path="level" type="choice" required>
+  Permission level:
+  - `Reset to Default`: Use bot's default permission
+  - `Administrator`: Require Administrator
+  - `Manage Server`: Require Manage Server
+  - `Manage Roles`: Require Manage Roles
+  - `Manage Messages`: Require Manage Messages
+  - `Kick Members`: Require Kick Members
+  - `Ban Members`: Require Ban Members
+  - `Everyone (None)`: No permission required
+</ParamField>
+
+**Example**:
+```
+/config permission command:purge level:Manage Messages
+/config permission command:8ball level:Everyone (None)
+```
+
+---
+
+### View Configuration
+
+#### Single Command
+
+```
+/config overview command:<command>
+```
+
+<ParamField path="command" type="string" required>
+  View settings for specific command (autocomplete enabled)
+</ParamField>
+
+**Shows**:
+- Enabled/Disabled status
+- Permission requirement
+- Allowed channels (or Global)
+
+#### All Commands
+
+```
+/config overview
+```
+
+Displays paginated list of all commands with:
+- Status indicator (🟢 Enabled / 🔴 Disabled)
+- Permission level
+- Channel scope (Global / Limited)
+
+**Navigation**: Use Previous/Next buttons to browse pages (10 commands per page)
+
+---
+
+## Configuration Storage
+
+Settings are stored per-server in the PostgreSQL database:
+- Survives bot restarts
+- Independent per guild
+- Cached for performance
+- Validated on every command execution
+
+---
+
+## Trigger
+
+Create custom server-specific auto-responses with text or images.
+
+### Add Trigger
+
+```
+/trigger add keyword:<phrase> [text:<response>] [image:<attachment>] [strict:<true/false>]
+```
+
+<ParamField path="keyword" type="string" required>
+  The phrase to listen for in messages
+</ParamField>
+
+<ParamField path="text" type="string">
+  Text response (optional if image provided)
+</ParamField>
+
+<ParamField path="image" type="attachment">
+  Image response (optional if text provided)
+</ParamField>
+
+<ParamField path="strict" type="boolean" default="false">
+  If true, keyword must match case exactly
+</ParamField>
+
+**Requirements**:
+- Must provide either `text` OR `image` (or both)
+- Images stored in Supabase cloud storage
+- Overwrites existing trigger with same keyword
+
+**Examples**:
+```
+/trigger add keyword:hello text:"Welcome to the server!"
+/trigger add keyword:cat image:[upload cat.jpg]
+/trigger add keyword:CodeWord strict:true text:"Secret response"
+```
+
+---
+
+### Delete Trigger
+
+```
+/trigger delete keyword:<keyword>
+```
+
+<ParamField path="keyword" type="string" required>
+  The trigger to delete (autocomplete enabled)
+</ParamField>
+
+**Features**:
+- Removes database entry
+- Deletes image from Supabase storage (if applicable)
+- Clears trigger cache
+- Autocomplete suggests existing triggers
+
+---
+
+### List Triggers
+
+```
+/trigger list
+```
+
+Displays all server triggers with:
+- 📝 Text triggers
+- 🖼️ Image triggers
+- Case sensitivity mode (Strict/Normal)
+- Pagination (10 per page)
+
+---
+
+## How Triggers Work
+
+### Matching System
+
+**Normal Mode** (default):
+```
+Keyword: "hello"
+Matches: "hello", "Hello", "HELLO", "hello world"
+```
+
+**Strict Mode**:
+```
+Keyword: "Hello"
+Matches: "Hello" only
+Does NOT match: "hello", "HELLO"
+```
+
+### Response Behavior
+
+- **Text Triggers**: Bot sends message in same channel
+- **Image Triggers**: Bot sends embedded image from cloud storage
+- **No Command Prefix**: Triggers activate on any message containing keyword
+- **Instant Response**: &lt;500ms typical latency
+
+---
+
+## Storage Architecture
+
+### Database (PostgreSQL)
+
+```sql
+triggers (
+  guild_id TEXT,
+  keyword TEXT,
+  response TEXT,
+  is_image BOOLEAN,
+  case_sensitive BOOLEAN,
+  PRIMARY KEY (guild_id, keyword)
+)
+```
+
+### Image Storage (Supabase)
+
+- **Bucket**: `triggers`
+- **Path Format**: `{guild_id}/{timestamp}_{keyword}.png`
+- **Public Access**: Direct CDN URLs
+- **Auto-Cleanup**: Images deleted when trigger removed
+
+---
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Welcome Messages" icon="hand-wave">
+    Auto-respond to greetings
+  </Card>
+  <Card title="FAQ Automation" icon="circle-question">
+    Answer common questions
+  </Card>
+  <Card title="Meme Responses" icon="face-grin-tears">
+    React to keywords with images
+  </Card>
+  <Card title="Easter Eggs" icon="egg">
+    Hidden server secrets
+  </Card>
+</CardGroup>
+
+---
+
+## Limitations
+
+- **Storage**: Images must be &lt;256KB (Discord attachment limit)
+- **Keyword Length**: Practical limit ~100 characters
+- **Response Length**: 2000 characters for text responses
+- **Rate Limiting**: Subject to Discord API limits
+- **Permissions**: Requires **Manage Messages** to add/delete triggers
+
+<Warning>
+Triggers run on **every message** in the server. Avoid using common words as keywords to prevent spam. Use specific phrases or enable strict mode for sensitive triggers.
+</Warning>
+
+---
+
+## Environment Requirements
+
+<Note>
+Image triggers require Supabase configuration:
+- `SUPABASE_URL`: Your Supabase project URL
+- `SUPABASE_KEY`: Service role key
+- Storage bucket named `triggers` must exist
+
+Without Supabase, only text triggers will work.
+</Note>

@@ -1,0 +1,168 @@
+---
+title: Server Setup
+description: Step-by-step guide to adding Jill Stingray to your Discord server and configuring initial settings
+---
+
+## Adding the Bot to Your Server
+
+<Steps>
+  <Step title="Generate Invite Link">
+    To invite Jill Stingray to your server, you'll need to generate an OAuth2 invite URL with the proper permissions.
+
+    **Required Permissions:**
+    - Send Messages
+    - Embed Links
+    - Attach Files
+    - Read Message History
+    - Use Slash Commands
+    - Manage Roles (for role management features)
+    - Manage Messages (for moderation commands)
+
+    The bot uses Discord's slash command system exclusively - no prefix commands are required.
+  </Step>
+
+  <Step title="Authorize the Bot">
+    Click the invite link and select your server from the dropdown menu. You must have "Manage Server" permissions to add bots.
+
+    Discord will show you all the permissions the bot is requesting. Review them and click "Authorize".
+  </Step>
+
+  <Step title="Complete Security Check">
+    Complete the CAPTCHA verification to confirm you're not a robot.
+  </Step>
+</Steps>
+
+## Initial Setup
+
+Once Jill Stingray joins your server, she will automatically:
+
+1. **Initialize database settings** - Creates a guild_settings entry with default command rules
+2. **Send a welcome message** - Posted in your system channel or general chat
+3. **Run diagnostics** - Checks permissions and role hierarchy
+
+### Understanding the Welcome Message
+
+The bot performs automatic diagnostics when joining:
+
+```js
+// From events/guildCreate.js:76-91
+if (hasManageRoles) {
+  statusText += "🟢 **Permissions:** `Manage Roles` active.\n";
+} else {
+  statusText += "🔴 **Permissions:** Missing `Manage Roles`.\n";
+  color = 0xff0055;
+}
+
+if (isHierarchyBroken) {
+  statusText += "🔴 **Hierarchy:** I have no valid manual role assigned.\n";
+  color = 0xff0055;
+} else {
+  statusText += `🟢 **Hierarchy:** Operating under role \`${highestRole.name}\`.\n`;
+}
+```
+
+<Warning>
+  **Critical:** Discord's default integration role is insufficient for full functionality. You must create a manual role with `Manage Roles` permission and assign it to the bot.
+</Warning>
+
+## Role Hierarchy Setup
+
+<Steps>
+  <Step title="Create a Bot Role">
+    Go to **Server Settings** > **Roles** and create a new role for Jill Stingray.
+
+    **Recommended permissions:**
+    - Manage Roles
+    - Manage Messages
+    - Manage Emojis and Stickers (for `/steal` command)
+  </Step>
+
+  <Step title="Position the Role">
+    Drag the bot's role **above** any roles you want it to manage. The bot can only manage roles lower than its highest role.
+
+    <Info>
+      This is a Discord limitation - bots cannot assign or remove roles that are positioned higher than their own highest role in the hierarchy.
+    </Info>
+  </Step>
+
+  <Step title="Assign the Role">
+    Right-click Jill Stingray in the member list and assign the newly created role.
+  </Step>
+
+  <Step title="Verify Setup">
+    Click the **"Run Diagnostics"** button in the welcome message, or use `/config overview` to verify everything is configured correctly.
+
+    You should see:
+    - 🟢 **Permissions:** `Manage Roles` active
+    - 🟢 **Hierarchy:** Operating under role `YourRoleName`
+  </Step>
+</Steps>
+
+## First Configuration Steps
+
+After setup, use the `/config` command to customize the bot's behavior:
+
+### View All Settings
+```
+/config overview
+```
+
+This displays a paginated list of all commands with their current status, permission requirements, and channel restrictions.
+
+### Configure a Specific Command
+```
+/config overview command:ping
+```
+
+Shows detailed settings for a single command:
+- **Status** - Enabled or disabled
+- **Permission** - Minimum permission required
+- **Allowed Channels** - Channel whitelist (if any)
+
+## Default Settings
+
+All commands start with these default configurations (from `utils/default.js:2-196`):
+
+- **Most commands:** Available to everyone, enabled globally
+- **Moderation commands:** Require specific permissions
+  - `/config`, `/ghost`, `/dashboard` - Require "Manage Server"
+  - `/purge` - Requires "Manage Messages"
+  - `/role`, `/audit` - Require "Manage Roles"
+  - `/steal` - Requires "Manage Emojis and Stickers"
+  - `/perms` - Requires "Administrator"
+
+## Troubleshooting
+
+### Bot Not Responding to Commands
+
+1. Verify the bot has "Use Application Commands" permission
+2. Check if the command is enabled: `/config overview`
+3. Ensure you're in an allowed channel (if channel restrictions are set)
+4. Verify you have the required permissions for that command
+
+### Role Management Not Working
+
+1. Run diagnostics to check permissions and hierarchy
+2. Ensure the bot's role is positioned higher than roles it needs to manage
+3. Verify the bot has "Manage Roles" permission
+4. Check that the bot has a manually assigned role (not just the integration role)
+
+### Commands Showing Permission Errors
+
+If users see:
+```
+🚫 Access Denied: You need the `Manage Server` permission.
+```
+
+This means the command requires specific permissions. Use `/config permission` to adjust the requirement, or have users obtain the necessary permissions.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Permission System" icon="shield" href="/guides/permissions">
+    Learn how to configure per-command permissions and role requirements
+  </Card>
+  <Card title="Custom Triggers" icon="bolt" href="/guides/custom-triggers">
+    Set up automated responses for specific keywords in your server
+  </Card>
+</CardGroup>

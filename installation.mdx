@@ -1,0 +1,414 @@
+---
+title: Installation
+description: Set up Jill Stingray Discord bot with Docker or npm
+---
+
+## Prerequisites
+
+Before installing Jill Stingray, ensure you have:
+
+<CardGroup cols={2}>
+  <Card title="Discord Bot Token" icon="discord">
+    Create a bot application at [Discord Developer Portal](https://discord.com/developers/applications)
+  </Card>
+  <Card title="PostgreSQL Database" icon="database">
+    A PostgreSQL instance (local or cloud-hosted)
+  </Card>
+  <Card title="Node.js 24+" icon="node-js">
+    Required for npm installation method
+  </Card>
+  <Card title="Docker (Optional)" icon="docker">
+    Recommended for production deployments
+  </Card>
+</CardGroup>
+
+## Creating a Discord Bot
+
+<Steps>
+  <Step title="Create Application">
+    Navigate to the [Discord Developer Portal](https://discord.com/developers/applications) and click **New Application**.
+    
+    Give your bot a name (e.g., "Jill Stingray") and accept the terms.
+  </Step>
+
+  <Step title="Enable Bot User">
+    Go to the **Bot** section in the left sidebar and click **Add Bot**.
+    
+    Copy the bot token and save it securely - you'll need this for the `DISCORD_TOKEN` environment variable.
+  </Step>
+
+  <Step title="Configure Intents">
+    In the **Bot** section, scroll down to **Privileged Gateway Intents** and enable:
+    
+    - **Server Members Intent**
+    - **Message Content Intent**
+    
+    These are required for member caching and command prefix detection.
+  </Step>
+
+  <Step title="Generate Invite Link">
+    Go to **OAuth2 → URL Generator** and select:
+    
+    **Scopes:**
+    - `bot`
+    - `applications.commands`
+    
+    **Bot Permissions:**
+    - Manage Roles
+    - Manage Channels
+    - Read Messages/View Channels
+    - Send Messages
+    - Manage Messages
+    - Embed Links
+    - Attach Files
+    - Read Message History
+    - Add Reactions
+    - Use Slash Commands
+    
+    Copy the generated URL and use it to invite the bot to your server.
+  </Step>
+</Steps>
+
+## Installation Methods
+
+<Tabs>
+  <Tab title="Docker (Recommended)">
+    Docker provides the easiest and most reliable deployment method.
+
+    ### Step 1: Clone Repository
+
+    ```bash
+    git clone https://github.com/ItsTrudeauver/jill-stingray-pre.git
+    cd jill-stingray-pre
+    ```
+
+    ### Step 2: Configure Environment
+
+    Create a `.env` file in the project root:
+
+    ```bash .env
+    DISCORD_TOKEN=your_discord_bot_token
+    DATABASE_URL=postgresql://user:password@host:5432/database
+    SUPABASE_URL=your_supabase_url
+    SUPABASE_SERVICE_KEY=your_supabase_service_key
+    MAPILLARY_TOKEN=your_mapillary_token
+    GROQ_API_KEY=your_groq_api_key
+    BOT_OWNER_ID=your_discord_user_id
+    PORT=8080
+    ```
+
+    <Note>
+    See [Configuration](/configuration) for detailed information about each environment variable.
+    </Note>
+
+    ### Step 3: Build and Run
+
+    Build the Docker image:
+
+    ```bash
+    docker build -t jill-stingray .
+    ```
+
+    Run the container:
+
+    ```bash
+    docker run -d \
+      --name jill-stingray \
+      --env-file .env \
+      -p 8080:8080 \
+      --restart unless-stopped \
+      jill-stingray
+    ```
+
+    ### Step 4: Verify Deployment
+
+    Check container logs:
+
+    ```bash
+    docker logs -f jill-stingray
+    ```
+
+    You should see:
+
+    ```
+    --- Jill Stingray Boot Sequence ---
+    [DB] PostgreSQL Connected & Synced.
+    [CMD] Loaded /mix
+    [CMD] Loaded /geo
+    [EVT] Loaded event: ready
+    Jill Stingray is online. (User: YourBotName)
+    Mixing drinks and changing lives.
+    ✅ Synced 25 Global Commands.
+    ```
+
+    <Tip>
+    The bot exposes a health check endpoint at `http://localhost:8080` that returns "Jill Stingray is mixing drinks..." when running.
+    </Tip>
+
+  </Tab>
+
+  <Tab title="npm/Node.js">
+    Install and run Jill Stingray directly with npm.
+
+    ### Step 1: Clone Repository
+
+    ```bash
+    git clone https://github.com/ItsTrudeauver/jill-stingray-pre.git
+    cd jill-stingray-pre
+    ```
+
+    ### Step 2: Install Dependencies
+
+    The bot requires Node.js 24 or higher:
+
+    ```bash
+    npm install
+    ```
+
+    Key dependencies that will be installed:
+
+    ```json package.json
+    {
+      "dependencies": {
+        "eris": "^0.17.2",
+        "@supabase/supabase-js": "^2.90.0",
+        "pg": "^8.16.3",
+        "@napi-rs/canvas": "^0.1.88",
+        "axios": "^1.13.2",
+        "groq-sdk": "^0.37.0",
+        "dotenv": "^16.6.1"
+      }
+    }
+    ```
+
+    <Warning>
+    `@napi-rs/canvas` requires system dependencies. On Alpine/Debian systems:
+
+    ```bash
+    # Debian/Ubuntu
+    apt-get install -y python3 make g++ cairo-dev pango-dev \
+      giflib-dev jpeg-dev librsvg-dev fontconfig
+
+    # Alpine
+    apk add --no-cache python3 make g++ cairo-dev pango-dev \
+      giflib-dev jpeg-dev librsvg-dev fontconfig
+    ```
+    </Warning>
+
+    ### Step 3: Configure Environment
+
+    Create a `.env` file:
+
+    ```bash .env
+    DISCORD_TOKEN=your_discord_bot_token
+    DATABASE_URL=postgresql://user:password@host:5432/database
+    SUPABASE_URL=your_supabase_url
+    SUPABASE_SERVICE_KEY=your_supabase_service_key
+    MAPILLARY_TOKEN=your_mapillary_token
+    GROQ_API_KEY=your_groq_api_key
+    BOT_OWNER_ID=your_discord_user_id
+    PORT=8080
+    ```
+
+    ### Step 4: Start the Bot
+
+    ```bash
+    npm start
+    ```
+
+    Or use a process manager like PM2:
+
+    ```bash
+    npm install -g pm2
+    pm2 start index.js --name jill-stingray
+    pm2 save
+    pm2 startup
+    ```
+
+    ### Step 5: Verify Installation
+
+    Check the console output for:
+
+    ```
+    --- Jill Stingray Boot Sequence ---
+    [Loader] Successfully loaded 25 VA-11 HALL-A drinks.
+    [DB] PostgreSQL Connected & Synced.
+    [CMD] Loaded /mix
+    [EVT] Loaded event: ready
+    Jill Stingray is online.
+    ```
+
+  </Tab>
+</Tabs>
+
+## Database Setup
+
+Jill Stingray automatically creates all required tables on first startup:
+
+```javascript index.js (Lines 87-93)
+await init();
+
+loadCommands();
+loadEvents();
+
+bot.connect();
+```
+
+The `init()` function from `/utils/db.js` creates these tables:
+
+- `guild_settings` - Server configuration and admin roles
+- `activity` - User activity tracking for regulars
+- `drinks` - Drink order history and statistics
+- `custom_roles` - User-created custom roles
+- `active_mutes` - Timed mute management
+- `triggers` - Custom keyword triggers
+- `emojis` - Emoji usage statistics
+- `dangeru_posts` - Anonymous posting system
+- `aliases` - Username change history
+
+<Note>
+No manual database setup required. The bot handles schema creation automatically.
+</Note>
+
+## Verifying Installation
+
+<Steps>
+  <Step title="Check Bot Online Status">
+    The bot should appear online in your Discord server with the status:
+    
+    - Playing: **VA-11 HALL-A OST**
+    - Or: **Time to mix drinks and change lives.**
+    
+    Status rotates every 30 seconds.
+  </Step>
+
+  <Step title="Test Slash Commands">
+    Type `/` in any channel and verify that Jill Stingray's commands appear:
+    
+    - `/help` - Command menu
+    - `/mix` - Mix drinks
+    - `/ping` - Connection test
+  </Step>
+
+  <Step title="Test Basic Command">
+    Run `/ping` to verify the bot is responding:
+    
+    ```
+    🏓 Pong! Latency: 45ms
+    ```
+  </Step>
+
+  <Step title="Check Logs">
+    Verify all commands and events loaded successfully:
+    
+    ```bash
+    docker logs jill-stingray
+    # or
+    pm2 logs jill-stingray
+    ```
+    
+    Look for:
+    - `[CMD] Loaded /commandname` for each command
+    - `[EVT] Loaded event: eventname` for each event
+    - `✅ Synced X Global Commands`
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Bot appears offline">
+    **Check Discord Token:**
+    ```bash
+    # Verify token is set correctly
+    echo $DISCORD_TOKEN
+    ```
+    
+    **Check Logs:**
+    ```bash
+    docker logs jill-stingray
+    ```
+    
+    Common errors:
+    - `Error: Incorrect login credentials` - Invalid bot token
+    - `Error: 401 Unauthorized` - Token format error
+  </Accordion>
+
+  <Accordion title="Database connection fails">
+    **Verify Connection String:**
+    ```javascript
+    // Format: postgresql://user:password@host:port/database
+    DATABASE_URL=postgresql://user:pass@localhost:5432/jillbot
+    ```
+    
+    **Test Connection:**
+    ```bash
+    psql $DATABASE_URL -c "SELECT version();"
+    ```
+    
+    The bot requires `ssl: { rejectUnauthorized: false }` for cloud databases.
+  </Accordion>
+
+  <Accordion title="Slash commands don't appear">
+    **Wait for Sync:**
+    Global commands can take up to 1 hour to propagate. Use guild commands for instant updates:
+    
+    ```javascript events/ready.js (Lines 62-63)
+    await bot.bulkEditGuildCommands(TEST_GUILD_ID, commandData);
+    ```
+    
+    **Check Permissions:**
+    Ensure the bot invite included `applications.commands` scope.
+  </Accordion>
+
+  <Accordion title="Canvas/Image errors">
+    **Install System Dependencies:**
+    
+    Canvas requires native libraries:
+    ```bash
+    # Alpine
+    apk add cairo-dev pango-dev jpeg-dev giflib-dev
+    
+    # Debian/Ubuntu  
+    apt-get install libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev
+    ```
+    
+    Rebuild after installing dependencies:
+    ```bash
+    npm rebuild @napi-rs/canvas
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/configuration"
+  >
+    Configure environment variables and API integrations
+  </Card>
+  <Card
+    title="Server Setup"
+    icon="server"
+    href="/guides/server-setup"
+  >
+    Set up admin roles and configure server-specific settings
+  </Card>
+  <Card
+    title="Commands"
+    icon="terminal"
+    href="/commands/overview"
+  >
+    Browse the complete command reference
+  </Card>
+  <Card
+    title="Features"
+    icon="sparkles"
+    href="/features/drinks"
+  >
+    Explore drink mixing, Geoguessr, and more
+  </Card>
+</CardGroup>

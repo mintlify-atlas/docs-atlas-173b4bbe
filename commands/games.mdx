@@ -1,0 +1,205 @@
+---
+title: Game Commands
+description: Interactive multiplayer games and activities
+icon: gamepad
+---
+
+## Geo (Geoguessr)
+
+Play competitive Geoguessr with real-world locations from Mapillary imagery.
+
+### Host a Match
+
+```
+/geo host [rounds:<1-20>] [time:<30-600>]
+```
+
+<ParamField path="rounds" type="integer" default="1">
+  Number of rounds to play (1-20)
+</ParamField>
+
+<ParamField path="time" type="integer" default="180">
+  Seconds per round (30-600)
+</ParamField>
+
+### Quit Match
+
+```
+/geo quit
+```
+
+Terminates the current match and clears the lobby.
+
+---
+
+## How to Play
+
+1. **Host creates lobby** with custom settings
+2. **Players join** using the "Join Match" button
+3. **Host starts** the game
+4. **Each round**:
+   - View a real-world street photo
+   - Open the interactive map
+   - Navigate by clicking grid cells (1-9)
+   - Use "Speedrun" mode for rapid cell sequences
+   - Lock in your guess
+5. **Scoring**: Closer guesses = more points (max 5000 per round)
+6. **Results**: Map visualization showing all guesses
+
+---
+
+## Features
+
+### Advanced Navigation
+
+- **Interactive Grid System**: 3x3 cell zoom navigation
+- **Speedrun Mode**: Input cell sequences like "51244" for rapid navigation
+- **4x Max Zoom**: Progressive zoom levels for precision
+- **Back Button**: Undo zoom steps
+
+### Location Intelligence
+
+- **Multi-Region Support**: Africa (Hard), Asia/South America (Medium), Europe/North America/Oceania (Easy)
+- **Smart Fallback**: Cached locations if API fails
+- **Real Imagery**: Mapillary street-level photos
+- **City & Capital Targeting**: Uses geo APIs for accurate location selection
+
+### Match Features
+
+- **Multiplayer Lobbies**: Support for multiple players per match
+- **Round Scoring**: Distance-based point calculation
+- **Leaderboard Tracking**: Cumulative scores across rounds
+- **Result Maps**: Visual display of guess accuracy
+- **Auto-Progression**: 10-second breaks between rounds
+
+---
+
+## Scoring System
+
+```
+Points = max(0, 5000 - distance_in_km)
+```
+
+- **Perfect guess (0km)**: 5000 points
+- **Very close (&lt;100km)**: 4900+ points
+- **Good guess (500km)**: 4500 points
+- **Far (2000km)**: 3000 points
+- **Very far (5000km+)**: 0 points
+
+---
+
+## Environment Requirements
+
+<Warning>
+This command requires a **Mapillary API token** set as `MAPILLARY_TOKEN` in environment variables. Without it, the bot will fall back to cached locations (limited variety).
+</Warning>
+
+---
+
+## Dangeru (Anonymous Textboard)
+
+Manage an anonymous textboard node inspired by 2channel/Futaba culture.
+
+### Setup
+
+```
+/dangeru setup
+```
+
+Deploys the terminal in the current channel. Only one terminal per server.
+
+<ParamField path="setup" type="subcommand">
+  (Admin) Spawns the Dangeru feed interface
+</ParamField>
+
+### Post Anonymously
+
+```
+/dangeru post message:<your message>
+```
+
+<ParamField path="message" type="string" required>
+  The content of your anonymous post (2-500 characters)
+</ParamField>
+
+### Search Archives
+
+```
+/dangeru search query:<search term>
+```
+
+<ParamField path="query" type="string" required>
+  Text to search for in post history
+</ParamField>
+
+### Moderation
+
+#### View Logs (Admin)
+
+```
+/dangeru logs tripcode:<tripcode>
+```
+
+<ParamField path="tripcode" type="string" required>
+  The tripcode to investigate (e.g., !A1B2C3)
+</ParamField>
+
+**Features**:
+- Reveals user identity behind anonymous posts
+- Shows up to 20 recent posts
+- Displays timestamps and content
+- Administrator permission required
+
+#### Wipe Database (Owner)
+
+```
+/dangeru wipe
+```
+
+Completely erases all posts. **This action cannot be undone.**
+
+<Warning>
+Requires **BOT_OWNER** permission level. Formats the entire textboard.
+</Warning>
+
+---
+
+## How Dangeru Works
+
+### Tripcode System
+
+Each user receives a **daily unique tripcode** based on:
+```
+SHA256(userID + date + salt) -> !ABC123
+```
+
+- **Persistent within 24h**: Same tripcode for the day
+- **Resets daily**: New identity each day
+- **Guild-specific**: Different tripcode per server
+- **Traceable by admins**: Admins can view identity logs
+
+### Privacy Features
+
+- **Ephemeral responses**: First-time posters see their tripcode, returning users see no confirmation
+- **Self-destructing messages**: Successful posts delete the command interaction
+- **No author attribution**: Posts display only tripcode and timestamp
+
+### Interface
+
+- **Live Feed**: Paginated display (5 posts per page)
+- **Interactive Buttons**: Write, Navigate, Refresh
+- **Auto-Update**: Feed regenerates on new post
+- **Persistent Display**: Single message per channel (old feed deleted on update)
+
+---
+
+## Use Cases
+
+- **Anonymous Feedback**: Server suggestions without identity pressure
+- **Confession Board**: Safe space for sharing
+- **Community Dialogue**: Unfiltered discussion
+- **Event Coordination**: Anonymous planning
+
+<Note>
+While posts are anonymous to regular users, **server administrators can always trace posts** using `/dangeru logs` for moderation purposes.
+</Note>

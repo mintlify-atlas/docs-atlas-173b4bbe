@@ -1,0 +1,466 @@
+---
+title: Custom Triggers
+description: Create automated responses to specific keywords with text or images
+---
+
+## What Are Custom Triggers?
+
+Custom triggers allow you to configure automatic responses when users send specific messages. When someone types a keyword that matches a trigger, the bot instantly responds with your configured text or image.
+
+Use cases:
+- Server in-jokes and memes
+- Quick reference responses (server rules, links, FAQs)
+- Welcome messages for specific keywords
+- Easter eggs and community engagement
+
+<Info>
+  Triggers are stored per-server in the database and cached for 60 seconds for optimal performance.
+</Info>
+
+## Creating Triggers
+
+### Text Triggers
+
+Create a text-based auto-response:
+
+```
+/trigger add keyword:"hello" text:"Welcome to VA-11 Hall-A! 🍹"
+```
+
+Now whenever someone types exactly "hello" (case-insensitive by default), the bot responds with your message.
+
+### Image Triggers
+
+Create an image-based response:
+
+```
+/trigger add keyword:"jill" image:[upload a file]
+```
+
+Images are automatically uploaded to Supabase cloud storage and served via CDN:
+
+```js
+// From commands/trigger.js:104-132
+if (imageObj) {
+  isImage = true;
+  const fileBuffer = await downloadToBuffer(imageObj.url);
+  
+  const cleanKeyword = keyword.replace(/[^a-z0-9]/gi, '_').substring(0, 20);
+  const fileName = `${interaction.guildID}/${Date.now()}_${cleanKeyword}.png`;
+  
+  const { data, error } = await supabase
+    .storage
+    .from('triggers')
+    .upload(fileName, fileBuffer, {
+      contentType: imageObj.content_type || 'image/png',
+      upsert: true
+    });
+  
+  if (error) throw error;
+  
+  const urlData = supabase.storage.from('triggers').getPublicUrl(fileName);
+  publicUrl = urlData.data.publicUrl;
+  responseToStore = publicUrl;
+}
+```
+
+### Case-Sensitive Triggers
+
+By default, triggers ignore case. Enable strict matching:
+
+```
+/trigger add keyword:"CEO" text:"Chief Executive Operator" strict:true
+```
+
+With `strict:true`, only "CEO" (exact case) triggers the response. "ceo" or "Ceo" will not match.
+
+## Command Options
+
+The `/trigger add` command accepts:
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `keyword` | String | Yes | The phrase to listen for |
+| `text` | String | No* | Text response to send |
+| `image` | Attachment | No* | Image file to send |
+| `strict` | Boolean | No | Enable case-sensitive matching (default: false) |
+
+<Warning>
+  You must provide either `text` OR `image` - at least one is required. Both cannot be empty.
+</Warning>
+
+From `commands/trigger.js:44-49`:
+
+```js
+options: [
+  { name: "keyword", description: "The phrase to listen for.", type: 3, required: true },
+  { name: "text", description: "The text response (Optional).", type: 3, required: false },
+  { name: "image", description: "Upload an image response (Optional).", type: 11, required: false },
+  { name: "strict", description: "If true, case/capitalization must match exactly.", type: 5, required: false },
+]
+```
+
+## Managing Triggers
+
+### List All Triggers
+
+View all configured triggers:
+
+```
+/trigger list
+```
+
+Displays a paginated list showing:
+- 📝 Text triggers
+- 🖼️ Image triggers  
+- Case sensitivity mode (Normal/Strict)
+
+Example output from `commands/trigger.js:245-249`:
+
+```
+• 📝 **hello** `Normal`
+• 🖼️ **jill** `Normal`
+• 📝 **CEO** `Strict`
+```
+
+### Delete a Trigger
+
+```
+/trigger delete keyword:"hello"
+```
+
+This command:
+1. Removes the trigger from the database
+2. Deletes associated image files from Supabase storage (if applicable)
+3. Clears the trigger cache for immediate effect
+
+From `commands/trigger.js:174-201`:
+
+```js
+// Check if trigger has an image in cloud storage
+const oldRes = await db.query(
+  `SELECT response, is_image FROM triggers WHERE guild_id=$1 AND keyword=$2`,
+  [interaction.guildID, keyword]
+);
+
+if (oldRes.rows.length > 0 && oldRes.rows[0].is_image) {
+  const url = oldRes.rows[0].response;
+  const match = url.match(/triggers\/(.+)$/);
+  if (match) {
+    const filePath = match[1];
+    supabase.storage.from('triggers').remove([filePath]).catch(e => console.error("Cleanup error:", e));
+  }
+}
+
+// Delete from database
+const res = await db.query(
+  `DELETE FROM triggers WHERE guild_id = $1 AND keyword = $2`,
+  [interaction.guildID, keyword]
+);
+```
+
+<Info>
+  The delete command includes autocomplete - start typing a keyword and Discord will suggest matching triggers from your server.
+</Info>
+
+## How Triggers Work
+
+### Message Processing
+
+Triggers are processed by the `triggerHandler` event listener:
+
+From `events/triggerHandler.js:4-69`:
+
+```js
+module.exports = {
+  name: "messageCreate",
+  async execute(message, bot) {
+    // Ignore bots and DMs
+    if (message.author.bot || !message.guildID) return;
+
+    // Load triggers from cache or database
+    let triggers = [];
+    if (bot.triggerCache.has(message.guildID)) {
+      triggers = bot.triggerCache.get(message.guildID);
+    } else {
+      const res = await db.query(
+        `SELECT keyword, response, is_image, case_sensitive 
+         FROM triggers 
+         WHERE guild_id = $1`,
+        [message.guildID]
+      );
+      triggers = res.rows;
+      bot.triggerCache.set(message.guildID, triggers);
+      
+      // Auto-expire cache after 60 seconds
+      setTimeout(() => {
+        if (bot.triggerCache) bot.triggerCache.delete(message.guildID);
+      }, 60000);
+    }
+
+    if (!triggers || triggers.length === 0) return;
+
+    // Find matching trigger
+    const content = message.content;
+    const match = triggers.find((t) => {
+      if (t.case_sensitive) {
+        return content === t.keyword;  // Exact match
+      } else {
+        return content.toLowerCase() === t.keyword.toLowerCase();  // Case-insensitive
+      }
+    });
+
+    // Send response
+    if (match) {
+      if (match.is_image) {
+        await bot.createMessage(message.channel.id, {
+          embeds: [{ color: 0x2b2d31, image: { url: match.response } }],
+        });
+      } else {
+        await bot.createMessage(message.channel.id, {
+          content: match.response,
+        });
+      }
+    }
+  },
+};
+```
+
+### Performance Optimization
+
+The trigger system uses several optimizations:
+
+1. **Caching** - Triggers are cached in memory for 60 seconds
+2. **Early returns** - Bots and DMs are ignored immediately  
+3. **Single query** - All server triggers loaded in one database call
+4. **Exact matching only** - No regex or partial matches (fast string comparison)
+
+### Database Schema
+
+Triggers are stored with this structure:
+
+```sql
+CREATE TABLE triggers (
+  guild_id TEXT,
+  keyword TEXT,
+  response TEXT,
+  is_image BOOLEAN,
+  case_sensitive BOOLEAN,
+  PRIMARY KEY (guild_id, keyword)
+);
+```
+
+The composite primary key ensures:
+- One trigger per keyword per server
+- Overwriting a trigger updates the existing entry
+- No duplicate keywords in the same server
+
+## Permissions
+
+From `commands/trigger.js:80-83` and `utils/default.js:133-138`:
+
+- **Adding triggers:** Requires `Manage Messages` permission
+- **Deleting triggers:** Requires `Manage Messages` permission  
+- **Listing triggers:** Available to everyone
+- **Triggering responses:** Available to everyone (no permission needed to use triggers)
+
+```js
+if (sub === "add") {
+  if (!interaction.member.permissions.has("manageMessages")) {
+    return interaction.createMessage({ content: "❌ Access Denied.", flags: 64 });
+  }
+}
+```
+
+You can modify these defaults using `/config permission command:trigger`.
+
+## Advanced Usage
+
+### Overwriting Existing Triggers
+
+Simply use `/trigger add` with an existing keyword:
+
+```
+/trigger add keyword:"hello" text:"New response!"
+```
+
+The database uses `ON CONFLICT` to update:
+
+```js
+// From commands/trigger.js:140-147
+await db.query(
+  `INSERT INTO triggers (guild_id, keyword, response, is_image, case_sensitive)
+   VALUES ($1, $2, $3, $4, $5)
+   ON CONFLICT (guild_id, keyword)
+   DO UPDATE SET response = $3, is_image = $4, case_sensitive = $5`,
+  [interaction.guildID, keyword, responseToStore, isImage, strict]
+);
+```
+
+### Cache Invalidation
+
+After adding or deleting triggers, the cache is immediately cleared:
+
+```js
+if (bot.triggerCache) bot.triggerCache.delete(interaction.guildID);
+```
+
+This ensures the next message will fetch fresh data from the database.
+
+### Image Storage Structure
+
+Images are organized by server:
+
+```
+triggers/
+  ├── {guild_id_1}/
+  │   ├── 1234567890_hello.png
+  │   └── 1234567891_jill.png
+  └── {guild_id_2}/
+      └── 1234567892_meme.png
+```
+
+Filename format from `commands/trigger.js:112-113`:
+```js
+const cleanKeyword = keyword.replace(/[^a-z0-9]/gi, '_').substring(0, 20);
+const fileName = `${interaction.guildID}/${Date.now()}_${cleanKeyword}.png`;
+```
+
+## Examples
+
+<CodeGroup>
+```bash Simple text response
+/trigger add keyword:"rules" text:"Please read #rules before posting!"
+```
+
+```bash Case-sensitive acronym
+/trigger add keyword:"FAQ" text:"Frequently Asked Questions" strict:true
+```
+
+```bash Image meme response
+/trigger add keyword:"jill" image:[upload jill.png]
+```
+
+```bash Multi-word trigger
+/trigger add keyword:"what is VA-11 HALL-A" text:"It's a cyberpunk bartender action game!"
+```
+</CodeGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use clear, unique keywords">
+    Avoid common words like "hi" or "ok" that appear in normal conversation. Use specific phrases or uncommon words to prevent unintended triggers.
+  </Accordion>
+
+  <Accordion title="Keep responses concise">
+    Short, punchy responses work best. Long messages may feel spammy or interrupt conversation flow.
+  </Accordion>
+
+  <Accordion title="Optimize image file sizes">
+    While the bot accepts images, keep file sizes reasonable (under 2MB) for faster loading and storage efficiency.
+  </Accordion>
+
+  <Accordion title="Document your triggers">
+    Use `/trigger list` regularly to audit what triggers exist. Remove outdated ones to keep the list manageable.
+  </Accordion>
+
+  <Accordion title="Test in a private channel first">
+    Before adding triggers server-wide, test them in a staff channel to ensure they work as expected.
+  </Accordion>
+
+  <Accordion title="Use strict mode sparingly">
+    Case-sensitive triggers are harder for users to remember. Reserve `strict:true` for acronyms or proper nouns only.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Trigger Not Responding
+
+**Possible causes:**
+
+1. **Exact match required** - Triggers match the entire message content only
+   - "hello there" will NOT trigger "hello"
+   - User must type exactly "hello" with nothing else
+
+2. **Case sensitivity** - Check if trigger was created with `strict:true`
+   - Use `/trigger list` to see the mode
+
+3. **Cache delay** - Wait up to 60 seconds for cache to refresh after adding
+
+4. **Bot permissions** - Ensure bot can send messages in that channel
+
+### Image Not Displaying
+
+**Check these:**
+
+1. **Supabase configuration** - Verify `SUPABASE_URL` and `SUPABASE_KEY` are set
+2. **Storage bucket** - Ensure `triggers` bucket exists in Supabase with public access
+3. **File upload success** - Check bot logs for upload errors
+4. **Image format** - Discord supports PNG, JPG, GIF, WebP
+
+### "Text or Image Required" Error
+
+This happens when:
+```
+/trigger add keyword:"test"  [← Missing both text and image]
+```
+
+You MUST provide at least one:
+
+```js
+// From commands/trigger.js:95-97
+if (!text && !imageObj) {
+  return interaction.editOriginalMessage({ content: "❌ Provide `text` or `image`." });
+}
+```
+
+### Autocomplete Not Showing Triggers
+
+The delete command uses database autocomplete:
+
+```js
+// From commands/trigger.js:66-74
+async autocomplete(interaction, bot) {
+  const focus = interaction.data.options[0].options.find((o) => o.focused);
+  const query = focus.value.toLowerCase();
+  const res = await db.query(
+    `SELECT keyword FROM triggers WHERE guild_id = $1 AND keyword ILIKE $2 LIMIT 25`,
+    [interaction.guildID, `%${query}%`]
+  );
+  return interaction.acknowledge(res.rows.map((r) => ({ name: r.keyword, value: r.keyword })));
+}
+```
+
+If autocomplete is empty:
+- No triggers exist in your server yet
+- Database connection issue (check bot logs)
+- You haven't started typing (Discord needs input to trigger autocomplete)
+
+## Limitations
+
+<Warning>
+  **Important Constraints:**
+  
+  - Triggers match **entire message content only** (not partial matches)
+  - No regex or wildcard patterns supported  
+  - No variables or dynamic content
+  - Image responses are embed-only (no caption text)
+  - One response per trigger (no random selection from multiple options)
+</Warning>
+
+## Related Features
+
+- Use `/config` to adjust who can manage triggers
+- Triggers work alongside other bot features without conflicts
+- Consider using `/custom` command for pre-built VA-11 HALL-A content
+
+<CardGroup cols={2}>
+  <Card title="Server Setup" icon="server" href="/guides/server-setup">
+    Initial bot configuration and role setup
+  </Card>
+  <Card title="Permissions" icon="shield" href="/guides/permissions">
+    Control who can create and manage triggers
+  </Card>
+</CardGroup>

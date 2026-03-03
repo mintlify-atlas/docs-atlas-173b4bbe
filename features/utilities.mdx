@@ -1,0 +1,413 @@
+---
+title: 'Utility Commands'
+description: 'Essential Discord utilities for server info, user lookups, avatars, emoji stats, and more'
+icon: 'toolbox'
+---
+
+## Overview
+
+Jill Stingray includes a suite of practical utility commands for everyday Discord needs. Each command is themed with the bot's cyberpunk aesthetic while providing clear, useful information.
+
+## Server Information
+
+### Get Server Details
+
+```bash
+/serverinfo
+```
+
+Displays comprehensive server statistics:
+
+```
+📍 Establishment: Glitch City Bar
+
+No description provided for this location.
+
+Owner: @OwnerName
+Occupancy: 1,247 Patrons
+Established: January 15, 2020
+
+Layout:
+52 Channels
+47 Roles
+
+Security Level:
+Verification: High
+
+ID: 123456789012345678
+
+[Server Icon] [Server Banner]
+```
+
+**Information Included:**
+- Server name and description
+- Owner mention
+- Total member count (approximate)
+- Creation date (formatted)
+- Channel count
+- Role count
+- Verification level
+- Server ID
+- Icon and banner images (if set)
+
+### Technical Implementation
+
+```javascript
+const guild = await bot.getRESTGuild(interaction.guildID, true);
+const channels = await bot.getRESTGuildChannels(interaction.guildID);
+
+const created = new Date(guild.createdAt).toLocaleDateString("en-US", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+
+await interaction.createMessage({
+  embeds: [{
+    title: `📍 Establishment: ${guild.name}`,
+    description: guild.description || "No description provided for this location.",
+    color: 0x00ff99,
+    thumbnail: { url: guild.iconURL || null },
+    image: { url: guild.bannerURL || null },
+    fields: [
+      { name: "Owner", value: `<@${guild.ownerID}>`, inline: true },
+      { name: "Occupancy", value: `**${guild.approximateMemberCount}** Patrons`, inline: true },
+      { name: "Established", value: created, inline: true },
+      { name: "Layout", value: `**${channels.length}** Channels\n**${guild.roles.size}** Roles`, inline: true },
+      { name: "Security Level", value: `Verification: ${guild.verificationLevel}`, inline: true }
+    ],
+    footer: { text: `ID: ${guild.id}` }
+  }]
+});
+```
+
+## User Information
+
+### Lookup User Details
+
+```bash
+/userinfo [user:@mention]
+```
+
+**Parameters:**
+- `user` (optional) - User to look up (defaults to yourself)
+
+**Response:**
+```
+📂 Patron File: Username
+
+Identity:
+ID: 123456789012345678
+Tag: Username#1234
+
+Timestamps:
+Registered: March 5, 2018
+Tab Opened: June 12, 2022
+
+Affiliations:
+@Admin, @VIP, @Member, @Color-Purple
+
+Glitch City • Citizen Database
+[Timestamp]
+
+[User Avatar]
+```
+
+**Information Included:**
+- User ID and tag
+- Discord account creation date
+- Server join date
+- All roles (with smart truncation for users with many roles)
+- User avatar
+
+### Role List Truncation
+
+For users with many roles, the bot intelligently truncates:
+
+```javascript
+let roleList = member.roles.map((r) => `<@&${r}>`).join(", ");
+
+if (roleList.length === 0) {
+  roleList = "No specific affiliations.";
+}
+
+if (roleList.length > 1000) {
+  const hiddenCount = member.roles.length - 
+    roleList.substring(0, 1000).split(",").length;
+  roleList = roleList.substring(0, 1000) + 
+    `... (and ${hiddenCount} more)`;
+}
+```
+
+## Avatar Retrieval
+
+### Get User Avatar
+
+```bash
+/avatar [user:@mention]
+```
+
+**Parameters:**
+- `user` (optional) - User to view (defaults to yourself)
+
+**Response:**
+```
+📷 ID Photo: Username
+
+Open in Browser (clickable link)
+
+Looking sharp.
+
+[4096x4096 Avatar Image]
+```
+
+The bot fetches the highest quality avatar (4096px) and provides:
+- Embedded full-size image
+- Direct browser link
+- Works with both static and animated avatars
+
+### Dynamic Avatar URL
+
+```javascript
+const user = await bot.getRESTUser(targetID);
+const avatarUrl = user.dynamicAvatarURL("png", 4096);
+
+await interaction.createMessage({
+  embeds: [{
+    title: `📷 ID Photo: ${user.username}`,
+    color: 0xa45ee5,
+    image: { url: avatarUrl },
+    description: `[Open in Browser](${avatarUrl})`,
+    footer: { text: "Looking sharp." }
+  }]
+});
+```
+
+## Emoji Statistics
+
+### Visual Emoji Analytics
+
+```bash
+/emojistats top
+```
+
+Generates a beautiful pie chart with top emoji usage:
+
+```
+📊 Glitch City Emoji Analytics
+
+[Pie Chart Image]
+
+TOTAL USES
+15,847
+
+Legend:
+🔴 KEKW - 3,245 (20.5%)
+🟢 POGGERS - 2,891 (18.2%)
+🔵 COPIUM - 1,987 (12.5%)
+...
+```
+
+**Features:**
+- Custom-rendered donut chart with VA-11 HALL-A color palette
+- Top 10 emojis shown individually
+- Remaining emojis grouped as "OTHERS"
+- Emoji icons displayed in legend
+- Percentage breakdown
+- Total usage count in center
+
+<Accordion title="View Chart Generation Code">
+```javascript
+const canvas = createCanvas(850, 500);
+const ctx = canvas.getContext("2d");
+const centerX = 250;
+const centerY = 250;
+const radius = 180;
+
+// Background
+ctx.fillStyle = "#0f0514";
+ctx.fillRect(0, 0, 850, 500);
+
+// Draw pie slices
+let currentAngle = -Math.PI / 2;
+for (const entry of chartData) {
+  const sliceAngle = (parseInt(entry.count) / totalCount) * 2 * Math.PI;
+  ctx.fillStyle = entry.color;
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY);
+  ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
+  ctx.closePath();
+  ctx.fill();
+  currentAngle += sliceAngle;
+}
+
+// Center hole (donut effect)
+ctx.fillStyle = "#0f0514";
+ctx.beginPath();
+ctx.arc(centerX, centerY, radius * 0.6, 0, 2 * Math.PI);
+ctx.fill();
+
+// Center text
+ctx.textAlign = "center";
+ctx.fillStyle = "#ffffff";
+ctx.font = "20px VA11";
+ctx.fillText("TOTAL USES", centerX, centerY - 10);
+ctx.font = "32px VA11";
+ctx.fillText(totalCount.toLocaleString(), centerX, centerY + 25);
+```
+</Accordion>
+
+### Find Rarely Used Emojis
+
+```bash
+/emojistats stale
+```
+
+Shows the 15 least-used emojis:
+
+```
+🕸️ Dusty Emojis
+
+<:unused1:123456789> `unused1`: 2
+<:forgotten:234567890> `forgotten`: 3
+<:old_meme:345678901> `old_meme`: 5
+...
+```
+
+**Use Case:** Helps admins identify which emojis to remove when approaching the emoji limit.
+
+### Emoji Deep Dive
+
+```bash
+/emojistats info emoji:<paste_emoji>
+```
+
+**Example:**
+```bash
+/emojistats info emoji:<:kekw:123456789012345678>
+```
+
+**Response:**
+```
+Emoji Deep Dive
+
+<:kekw:123456789012345678>
+
+Name: kekw
+Uses: 3,245
+Last Seen: March 2, 2026
+```
+
+### Database Tracking
+
+Emoji usage is automatically tracked in PostgreSQL:
+
+```sql
+CREATE TABLE emojis (
+  guild_id TEXT,
+  emoji_id TEXT,
+  name TEXT,
+  count INTEGER,
+  is_animated BOOLEAN,
+  last_used BIGINT,
+  PRIMARY KEY (guild_id, emoji_id)
+);
+```
+
+The bot increments counters in real-time as users react and send messages.
+
+## Latency Check
+
+### Ping Command
+
+```bash
+/ping
+```
+
+**Response:**
+```
+I'm here. Don't worry. (Latency: 47ms)
+```
+
+Simple WebSocket latency check with Jill's personality.
+
+```javascript
+const latency = bot.shards.get(0).latency;
+await interaction.createMessage({
+  content: `I'm here. Don't worry. (Latency: **${latency}ms**)`,
+  flags: 64 // Ephemeral
+});
+```
+
+## Error Handling
+
+All utility commands include graceful error handling:
+
+```javascript
+try {
+  const guild = await bot.getRESTGuild(interaction.guildID, true);
+  // ... process data
+} catch (err) {
+  console.error(err);
+  await interaction.createMessage({
+    content: "I couldn't pull the files for this location. (API Error)",
+    flags: 64
+  });
+}
+```
+
+## Theming and Personality
+
+All utility commands maintain the VA-11 HALL-A cyberpunk theme:
+
+<Tabs>
+  <Tab title="Terminology">
+    - "Establishment" instead of "Server"
+    - "Patrons" instead of "Members"
+    - "Tab Opened" instead of "Joined"
+    - "Affiliations" instead of "Roles"
+    - "ID Photo" instead of "Avatar"
+  </Tab>
+  
+  <Tab title="Color Palette">
+    - Cyan: `0x00ff99` (server info)
+    - Purple: `0xa45ee5` (user info)
+    - Pink: `0xff0055` (emoji stats)
+    - Dark BG: `0x0f0514` (charts)
+  </Tab>
+  
+  <Tab title="Footer Text">
+    - "Glitch City • Citizen Database"
+    - "Looking sharp."
+    - "Augmented Eye | Janitorial Services"
+  </Tab>
+</Tabs>
+
+## Performance Optimizations
+
+### Emoji Stats Caching
+
+For emoji statistics, the bot:
+1. Queries database once
+2. Filters out deleted emojis
+3. Renders chart in memory
+4. Sends as single attachment
+
+### Avatar Quality
+
+Always fetches maximum quality (4096px) for future-proofing and display on high-DPI screens.
+
+### REST API Usage
+
+Utility commands use REST endpoints instead of cached data to ensure accuracy:
+
+```javascript
+// Fresh data from API
+const guild = await bot.getRESTGuild(interaction.guildID, true);
+const member = await bot.getRESTGuildMember(interaction.guildID, targetID);
+const user = await bot.getRESTUser(targetID);
+```
+
+<Note>
+All utility commands are designed to be ephemeral-friendly, meaning they can be made invisible to other users while still providing rich embeds and images to the command invoker.
+</Note>

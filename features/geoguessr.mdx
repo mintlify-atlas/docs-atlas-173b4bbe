@@ -1,0 +1,316 @@
+---
+title: 'Competitive Geoguessr'
+description: 'Play multiplayer geoguessr games with real street view images and interactive map guessing'
+icon: 'earth-americas'
+---
+
+## Overview
+
+The Geoguessr feature turns your Discord server into a competitive geography game arena. Players are shown real street-view imagery from around the world and must pinpoint the location on an interactive grid-based map system.
+
+**Key Features:**
+- Multiplayer lobby system
+- Real street-view images from Mapillary API
+- Interactive 9-grid zoom map interface
+- Haversine distance scoring (up to 5000 points per round)
+- Multi-round tournaments
+- Difficulty-based location pools (Easy, Medium, Hard)
+
+## Starting a Match
+
+### Host a Game
+
+```bash
+/geo host [rounds:1-20] [time:30-600]
+```
+
+**Parameters:**
+- `rounds` (optional) - Number of rounds to play (Default: 1, Max: 20)
+- `time` (optional) - Seconds per round (Default: 180, Max: 600)
+
+<Accordion title="Example: Host a 5-round match with 3 minutes per round">
+```bash
+/geo host rounds:5 time:180
+```
+
+**Response:**
+- Creates a lobby embed with "Join Match" and "Start Game" buttons
+- Shows current settings and squad leader
+- Players can join before the host starts the game
+</Accordion>
+
+### Quit a Match
+
+```bash
+/geo quit
+```
+
+Terminates the active match and clears the lobby.
+
+## How to Play
+
+### 1. Lobby Phase
+
+When a match is hosted, players see:
+
+```
+🌍 Drifter Protocol // Global
+
+Settings: 5 Rounds | 180s Limit
+Status: Waiting for operatives...
+
+Squad Leader: @Username
+
+[Join Match] [Start Game]
+```
+
+- Click **Join Match** to enter the game
+- Only the host can click **Start Game**
+
+### 2. Round Start
+
+Once started:
+1. Bot scans the globe for a location
+2. Real street-view image is displayed
+3. Players have the configured time limit to guess
+
+```
+📍 TARGET ACQUIRED
+Identify the sector.
+
+[🗺️ Open Map]
+```
+
+### 3. Interactive Map System
+
+Click **Open Map** to see a 3x3 grid overlay on a world map:
+
+```
+[1] [2] [3]
+[4] [5] [6]
+[7] [8] [9]
+
+[◀ Back] [✅ LOCK IN]
+```
+
+**Navigation:**
+- Click numbers 1-9 to zoom into that grid section
+- Maximum zoom: 4 levels deep
+- Click **◀ Back** to zoom out one level
+- Click **✅ LOCK IN** to submit your guess
+
+<Info>
+**Speedrun Mode:** Advanced players can use the **⚡ Speedrun** button (available at zoom 0) to input a sequence of numbers (e.g., "51244") to jump directly to a location.
+</Info>
+
+### 4. Scoring
+
+After all players guess (or time expires):
+
+```
+📊 Round 1 Results
+
+Location: Tokyo, Japan
+
+1. @Player1: +4850 (150km)
+2. @Player2: +3200 (1800km)
+3. @Player3: +1500 (3500km)
+
+[Map showing all guesses]
+```
+
+**Scoring Formula:**
+```javascript
+const points = Math.max(0, 5000 - Math.floor(distance_in_km));
+```
+
+- Perfect guess (0km): 5000 points
+- 1000km away: 4000 points
+- 5000km+ away: 0 points
+
+### 5. Match Completion
+
+After all rounds:
+
+```
+🏆 MATCH COMPLETE
+
+#1 @Player1: 18500 pts
+#2 @Player2: 14200 pts
+#3 @Player3: 9800 pts
+```
+
+## Location Difficulty Pools
+
+The system categorizes countries into three difficulty tiers:
+
+<Tabs>
+  <Tab title="Hard (Africa)">
+    - **Region:** All African countries
+    - **Challenge:** Limited street coverage, diverse landscapes
+    - **Examples:** Kenya, Morocco, South Africa
+  </Tab>
+  
+  <Tab title="Medium (Asia/South America)">
+    - **Region:** Asia + South/Central America
+    - **Challenge:** Mix of urban and rural areas
+    - **Examples:** Thailand, Brazil, India, Peru
+  </Tab>
+  
+  <Tab title="Easy (Europe/North America/Oceania)">
+    - **Region:** Europe, USA/Canada, Australia/NZ
+    - **Challenge:** Extensive coverage, recognizable landmarks
+    - **Examples:** France, United States, Germany, Australia
+  </Tab>
+</Tabs>
+
+## Technical Implementation
+
+### Location Fetching System
+
+The bot uses a "squad" system that searches all three difficulty pools in parallel:
+
+```javascript
+const squad = [
+  this.searchSpecificPool(REGIONS.HARD, "AFRICA_OPERATIVE"), 
+  this.searchSpecificPool(REGIONS.MEDIUM, "ASIA_SA_OPERATIVE"), 
+  this.searchSpecificPool(REGIONS.EASY, "WESTERN_OPERATIVE") 
+];
+
+const results = await Promise.race([
+  Promise.allSettled(squad),
+  new Promise((_, reject) => 
+    setTimeout(() => reject(new Error("Timeout")), TIMEOUT_MS)
+  )
+]);
+```
+
+### Geocoding Pipeline
+
+For each country:
+
+1. **Fetch Cities** via CountriesNow API
+2. **Random City Selection**
+3. **Geocode** with Photon (Komoot)
+4. **Find Street View** via Mapillary API
+5. **Retry Logic** with capital city fallback
+
+```javascript
+async tryGeocodeAndMapillary(searchTerm) {
+  // Get coordinates
+  const geoRes = await axios.get(
+    `https://photon.komoot.io/api/?q=${encodeURIComponent(searchTerm)}`
+  );
+  const [lon, lat] = geoRes.data.features[0].geometry.coordinates;
+  
+  // Search for street view imagery in expanding radius
+  const radii = [0.05, 0.2, 0.5];
+  for (const r of radii) {
+    const bbox = `${lon - r},${lat - r},${lon + r},${lat + r}`;
+    const mapRes = await axios.get(
+      `https://graph.mapillary.com/images?bbox=${bbox}`,
+      { headers: { Authorization: `OAuth ${MAPILLARY_TOKEN}` } }
+    );
+    // Return if imagery found
+  }
+}
+```
+
+### Grid-Based Zoom System
+
+The interactive map uses coordinate subdivision:
+
+```javascript
+processZoomMove(session, cell) {
+  if (session.zoom >= MAX_ZOOM) return;
+  
+  // Save history for back button
+  session.history.push({ x: session.x, y: session.y });
+  
+  // Calculate grid cell position (1-9 maps to row/col)
+  const row = Math.floor((cell - 1) / 3);
+  const col = (cell - 1) % 3;
+  
+  // Subdivide current view into 3x3 grid
+  const currentView = 1 / Math.pow(3, session.zoom);
+  const offset = currentView / 3;
+  
+  session.x = (session.x - (currentView / 2)) + 
+              (col * offset) + (offset / 2);
+  session.y = (session.y - (currentView / 2)) + 
+              (row * offset) + (offset / 2);
+  session.zoom++;
+}
+```
+
+### Distance Calculation (Haversine)
+
+```javascript
+haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + 
+            Math.cos(lat1 * Math.PI / 180) * 
+            Math.cos(lat2 * Math.PI / 180) * 
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+```
+
+## Fallback System
+
+<Warning>
+If the Mapillary API fails or `MAPILLARY_TOKEN` is not set, the system falls back to:
+1. **Fallback Cache** (`fallback_cache.json`) - Pre-loaded locations
+2. **Emergency Failsafe** - Tokyo, Japan with a Wikipedia image
+</Warning>
+
+### Status Updates
+
+During location fetch, users see progressive status messages:
+
+```
+🛰️ Scanning Globe... (Round 1/5)
+⚠️ Signal weak. Amplifying gain...
+📡 Retrying satellite uplink...
+```
+
+## Configuration Requirements
+
+### Environment Variables
+
+```bash
+MAPILLARY_TOKEN=your_mapillary_api_token
+```
+
+<Accordion title="How to get a Mapillary token">
+1. Sign up at [mapillary.com](https://www.mapillary.com)
+2. Go to Developer Settings
+3. Create a new application
+4. Copy your Client Token
+5. Add to `.env` file
+</Accordion>
+
+### Data Files
+
+- `data/all.json` - Country database with regions
+- `data/fallback_cache.json` - Emergency location cache
+
+## Map Rendering
+
+The bot uses custom map rendering utilities:
+
+```javascript
+const { getMapCrop, getResultMap } = require('../utils/geoRenderer');
+
+// Generate cropped map view for current zoom level
+const imgBuffer = await getMapCrop(session.x, session.y, session.zoom);
+
+// Generate results map with all player guesses
+const resultImg = await getResultMap(target, roundScores);
+```
+
+<Note>
+The map rendering system creates dynamic PNG images showing player guesses as markers with connecting lines to the actual location, making it easy to visualize accuracy.
+</Note>

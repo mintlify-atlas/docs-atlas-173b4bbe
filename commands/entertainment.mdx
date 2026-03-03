@@ -1,0 +1,200 @@
+---
+title: Entertainment Commands
+description: Fun and interactive entertainment features
+icon: sparkles
+---
+
+## 8ball
+
+Ask Jill for guidance with AI-powered contextual predictions.
+
+```
+/8ball question:<your question>
+```
+
+<ParamField path="question" type="string" required>
+  What is on your mind?
+</ParamField>
+
+### Features
+
+- **AI Context Detection**: Uses Groq LLaMA to classify question categories
+- **Contextual Responses**: Different response pools based on question type (love, work, identity, life, fortune, danger, chaos)
+- **Fallback System**: String similarity matching if AI fails
+- **Themed Embeds**: Color-coded responses matching the category
+
+### Example
+
+```
+/8ball question:Should I learn a new programming language?
+```
+
+**Response Categories**:
+- Love & Romance
+- Work & Career  
+- Identity & Purpose
+- Life & Philosophy
+- Fortune & Luck
+- Danger & Risk
+- Chaos & Absurdity
+- General (fallback)
+
+---
+
+## Surprise
+
+Can't decide? Let Jill pick a random VA-11 HALL-A drink for you.
+
+```
+/surprise
+```
+
+### Features
+
+- Random drink selection from VA-11 HALL-A database
+- Drink image attachments
+- Flavor profile and pricing information
+- Witty bartender commentary
+
+---
+
+## Identity
+
+Pull forensic alias history for server members.
+
+```
+/identity user:<@user>
+```
+
+<ParamField path="user" type="user" required>
+  Target user to investigate
+</ParamField>
+
+### Features
+
+- Tracks up to 20 most recent username changes
+- Displays change timestamps
+- Server-specific tracking
+- Forensic-style presentation
+
+---
+
+## Mix
+
+Prepare beverages from real-world cocktails or VA-11 HALL-A specials.
+
+### Subcommands
+
+#### Classic Cocktails
+
+```
+/mix classic name:<drink name>
+```
+
+<ParamField path="name" type="string" required>
+  Name of the cocktail (autocomplete enabled)
+</ParamField>
+
+**Features**:
+- Searches TheCocktailDB for real cocktails
+- Animated preparation sequence
+- Ingredient lists with measurements
+- Step-by-step instructions
+- High-quality drink images
+
+#### VA-11 HALL-A Specials
+
+```
+/mix special name:<drink name>
+```
+
+<ParamField path="name" type="string" required>
+  Name of the special drink (autocomplete enabled)
+</ParamField>
+
+**Features**:
+- Glitch City exclusive drinks
+- Flavor profiles and pricing
+- Custom drink images
+- Lore-accurate descriptions
+- Patron tracking system integration
+
+### Example
+
+```
+/mix classic name:Mojito
+/mix special name:Bad Touch
+```
+
+---
+
+## Palette
+
+Extract an interactive color palette from any image or GIF.
+
+```
+/palette image:<attachment> [amount:<1-10>] [sort:<method>]
+```
+
+<ParamField path="image" type="attachment" required>
+  The image or GIF to extract colors from
+</ParamField>
+
+<ParamField path="amount" type="integer" default="5">
+  How many colors to extract (1-10)
+</ParamField>
+
+<ParamField path="sort" type="choice">
+  Palette ordering method
+  - `dominant`: By usage frequency (default)
+  - `hue`: Rainbow spectrum order
+  - `luminance`: Light to dark
+</ParamField>
+
+### Features
+
+- **Interactive Color Selection**: Click dropdown to view color details
+- **Pantone Matching**: Finds closest named color match
+- **Visual Preview**: Generates color ribbon image
+- **Hex Code Display**: Shows exact color values
+- **GIF Support**: Works with animated images
+
+### Example
+
+```
+/palette image:[upload] amount:8 sort:hue
+```
+
+---
+
+## Colors
+
+Pick a color from the public palette to customize your server identity.
+
+```
+/colors setup
+```
+
+<ParamField path="setup" type="subcommand">
+  (Admin only) Initialize palette roles and post the selection menu
+</ParamField>
+
+### Features
+
+- **40 Preset Colors**: Two categories (Warm & Cool)
+- **Automatic Role Creation**: Creates and positions all palette roles
+- **Hierarchy Management**: Places roles below bot's highest role
+- **Custom Role Replacement**: Removes `/custom` role when selecting palette color
+- **Interactive Selection**: Dual dropdown menus with emojis
+
+### Available Colors
+
+**Warm & Vivid**:
+Red, Crimson, Brick, Rose, Hot Pink, Pastel Pink, Coral, Orange, Tangerine, Peach, Gold, Yellow, Cream, Amber, Brown, Chocolate, Beige, Maroon, Cherry, Salmon
+
+**Cool & Dark**:
+Forest Green, Emerald, Lime, Mint, Olive, Teal, Cyan, Sky Blue, Royal Blue, Navy, Midnight, Blurple, Purple, Violet, Lavender, Plum, White, Silver, Grey, Void (Black)
+
+<Warning>
+Requires **Administrator** permissions to run `/colors setup`. The command creates up to 40 roles and modifies role hierarchy.
+</Warning>
