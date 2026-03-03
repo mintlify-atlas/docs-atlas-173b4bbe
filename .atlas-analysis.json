@@ -1,0 +1,117 @@
+{
+  "projectType": "general",
+  "projectName": "Jill Stingray Discord Bot",
+  "projectDescription": "A VA-11 HALL-A themed Discord bot featuring drink mixing, geoguessr games, color tools, and server management.",
+  "theme": "almond",
+  "primaryColor": "#a45ee5",
+  "lightColor": "#ff00ff",
+  "darkColor": "#00ff99",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/drinks",
+              "features/geoguessr",
+              "features/colors",
+              "features/moderation",
+              "features/utilities"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/server-setup",
+              "guides/permissions",
+              "guides/custom-triggers"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Commands",
+        "groups": [
+          {
+            "group": "Command Reference",
+            "pages": [
+              "commands/overview",
+              "commands/entertainment",
+              "commands/games",
+              "commands/moderation",
+              "commands/utilities",
+              "commands/configuration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Technical",
+            "pages": [
+              "development/architecture",
+              "development/database",
+              "development/deployment"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "VA-11 HALL-A themed drink mixing with real cocktails and game specials",
+    "Competitive Geoguessr game with Mapillary street view integration",
+    "Advanced color palette extraction and generation tools",
+    "Emoji statistics and usage tracking",
+    "Flexible role management and permissions system",
+    "Custom trigger/response system for automated replies",
+    "Server configuration with per-command permissions",
+    "Activity tracking and user analytics"
+  ],
+  "publicApiSurface": [
+    "/mix classic - Order real-world cocktails from TheCocktailDB",
+    "/mix special - Order VA-11 HALL-A game drinks",
+    "/geo host - Start a geoguessr game session",
+    "/colors - Extract dominant colors from images",
+    "/palette - Generate color palettes",
+    "/role add/remove - Manage user roles",
+    "/config - Configure bot settings and permissions",
+    "/trigger - Set up custom response triggers",
+    "/emojistats - View server emoji usage statistics",
+    "/wiki - Search Wikipedia and other knowledge bases",
+    "/help - Browse all available commands",
+    "/serverinfo - View server information",
+    "/userinfo - View user information",
+    "/avatar - Display user avatars",
+    "/ping - Check bot latency",
+    "/purge - Bulk delete messages",
+    "/audit - View server audit logs",
+    "/ghost - Manage ghost ping detection",
+    "/selfmute - Temporary self-muting",
+    "/threads - Thread management utilities",
+    "/steal - Copy emojis from other servers",
+    "/menu - Interactive menu system",
+    "/tab - Tabbed interface commands",
+    "/8ball - Magic 8-ball responses",
+    "/surprise - Random surprise command",
+    "/pulse - Server activity pulse check",
+    "/regulars - Manage server regulars",
+    "/id - Get Discord IDs",
+    "/identity - User identity information",
+    "/dangeru - Danger level assessment",
+    "/streamline - Workflow optimization",
+    "/perms - Permission checker"
+  ]
+}
